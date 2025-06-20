@@ -595,7 +595,12 @@ class TelecomAnomalyDetector:
                 # Display results
                 self._display_file_results(result, prediction, anomaly_score)
                 
-                if prediction == -1:  # Anomaly detected
+                # Count anomalies based on comprehensive detection
+                has_specific_anomalies = 'anomalies' in result and len(result['anomalies']) > 0
+                ml_anomaly_detected = prediction == -1
+                low_anomaly_score = anomaly_score < -0.1
+                
+                if ml_anomaly_detected or has_specific_anomalies or low_anomaly_score:
                     total_anomalies += 1
         
         self.logger.info(f"\nTotal files processed: {len(all_results)}")
@@ -605,7 +610,14 @@ class TelecomAnomalyDetector:
     def _display_file_results(self, result: Dict, prediction: int, anomaly_score: float) -> None:
         """Display analysis results for a single file."""
         filename = os.path.basename(result['file'])
-        is_anomaly = prediction == -1
+        
+        # Determine anomaly status based on multiple factors
+        has_specific_anomalies = 'anomalies' in result and len(result['anomalies']) > 0
+        ml_anomaly_detected = prediction == -1
+        low_anomaly_score = anomaly_score < -0.1  # Lower scores indicate anomalies
+        
+        # Consider it an anomaly if either ML detected it OR specific anomalies found
+        is_anomaly = ml_anomaly_detected or has_specific_anomalies or low_anomaly_score
         
         print(f"\n{'='*60}")
         print(f"FILE: {filename}")
@@ -614,6 +626,12 @@ class TelecomAnomalyDetector:
         print(f"Anomaly Status: {'ANOMALY DETECTED' if is_anomaly else 'NORMAL'}")
         print(f"Anomaly Score: {anomaly_score:.4f} (lower = more anomalous)")
         print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # Additional anomaly indicators
+        if has_specific_anomalies:
+            print(f"Pattern-based Anomalies: {len(result['anomalies'])} detected")
+        if ml_anomaly_detected:
+            print(f"ML-based Detection: Isolation Forest flagged as anomaly")
         
         # Display specific anomalies found during analysis
         if 'anomalies' in result and result['anomalies']:
