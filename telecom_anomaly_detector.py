@@ -376,7 +376,7 @@ class TelecomAnomalyDetector:
                         'details': {'protocol': protocol, 'count': count, 'ratio': ratio}
                     })
         
-        return anomalies
+        return self._apply_severity_classification(anomalies)
     
     def analyze_hdf_file(self, hdf_path: str) -> Dict:
         """

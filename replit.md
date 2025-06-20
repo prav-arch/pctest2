@@ -120,6 +120,13 @@ Changelog:
   * Created MAC-based sample data for testing with user's specific DU addresses
   * Successfully tested unidirectional communication detection with MAC-based patterns
   * Communication keys now display MAC addresses instead of IP patterns for clearer identification
+- June 20, 2025. Anomaly severity classification system implementation:
+  * Created comprehensive severity classifier with 5 levels: CRITICAL, HIGH, MEDIUM, LOW, INFO
+  * Integrated priority scoring based on network impact, service impact, urgency, frequency, and duration
+  * Added contextual severity assessment considering device count, packet loss, duration, and business hours
+  * Enhanced anomaly reporting with impact descriptions, response times, and escalation requirements
+  * Implemented severity distribution statistics with automatic escalation identification
+  * Successfully tested all severity levels with comprehensive test data scenarios
 ```
 
 ## User Preferences
