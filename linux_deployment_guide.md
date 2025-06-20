@@ -59,6 +59,11 @@ python3 /opt/telecom/bin/telecom_anomaly_detector.py
 
 ## Anomaly Detection Features
 
+### Silent Operation Mode:
+- **No output when all files are normal** - Perfect for Linux automation
+- **Detailed output only when anomalies detected** - Clear alerts for issues
+- **Exit code 0 for normal operation** - Compatible with monitoring systems
+
 ### Detects Your Specific Scenarios:
 1. **DU sending but RU not responding** (HIGH severity)
 2. **Missing Control/User Plane data** (MEDIUM severity)

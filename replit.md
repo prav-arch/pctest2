@@ -106,6 +106,12 @@ Changelog:
   * Added dual-mode operation: development (local) and production (Linux system paths)
   * Configured system directories: /var/log/telecom/, /opt/telecom/, /data/telecom/
   * Created wrapper scripts for seamless production deployment
+- June 20, 2025. Silent operation mode implementation:
+  * Modified system to only display output when anomalies are detected
+  * Completely silent operation when all files are normal (no console output)
+  * Logging redirected to file-only for production use
+  * Maintains detailed anomaly reporting with packet logs and event details
+  * Optimized for Linux deployment where silence indicates normal operation
 ```
 
 ## User Preferences
