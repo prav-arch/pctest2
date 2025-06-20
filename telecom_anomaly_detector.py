@@ -38,6 +38,7 @@ except ImportError:
 
 from config import Config
 from utils import setup_logging, extract_telecom_features, process_hdf_file
+from severity_classifier import SeverityClassifier, SeverityLevel
 
 class TelecomAnomalyDetector:
     """
@@ -69,6 +70,9 @@ class TelecomAnomalyDetector:
         # Communication pattern tracking
         self.communication_patterns = defaultdict(list)
         self.traffic_stats = defaultdict(dict)
+        
+        # Initialize severity classifier
+        self.severity_classifier = SeverityClassifier()
         
     def load_or_create_model(self) -> None:
         """Load existing model or create new one."""
@@ -291,9 +295,19 @@ class TelecomAnomalyDetector:
             if stats['du_to_ru'] > 0 and stats['ru_to_du'] == 0:
                 # Get sample DU packets for logging
                 sample_du_packets = stats['du_packets'][:5]  # Show first 5 packets
+                # Create context for severity classification
+                context = {
+                    'affected_devices': 2,  # RU and DU pair
+                    'packet_loss_rate': 1.0,  # Complete loss of response
+                    'duration_minutes': 10,  # Assume ongoing issue
+                    'is_business_hours': True,
+                    'anomaly_score': -0.8  # High anomaly score
+                }
+                
                 anomalies.append({
                     'type': 'unidirectional_communication',
                     'description': f"DU sending to RU but no response from RU: {comm_pair}",
+                    'context': context,
                     'severity': 'high',
                     'details': stats,
                     'sample_packets': sample_du_packets,
@@ -310,9 +324,17 @@ class TelecomAnomalyDetector:
             if c_plane_ratio < 0.1:  # Less than 10% control plane
                 # Get sample user plane packets that are present
                 sample_u_packets = plane_separation.get('u_plane_packets', [])[:3]
+                context = {
+                    'affected_devices': 1,
+                    'packet_loss_rate': 1.0 - c_plane_ratio,
+                    'duration_minutes': 15,
+                    'is_business_hours': True,
+                    'anomaly_score': -0.6
+                }
                 anomalies.append({
                     'type': 'missing_control_plane',
                     'description': f"Very low control plane traffic: {c_plane_ratio:.2%}",
+                    'context': context,
                     'severity': 'medium',
                     'details': plane_separation,
                     'sample_packets': sample_u_packets,
