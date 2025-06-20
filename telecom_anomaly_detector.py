@@ -58,6 +58,10 @@ class TelecomAnomalyDetector:
         from production_protocol_mapper import ProductionProtocolMapper
         self.protocol_mapper = ProductionProtocolMapper()
         
+        # Initialize adaptive contamination manager
+        from adaptive_contamination_system import AdaptiveContaminationManager
+        self.contamination_manager = AdaptiveContaminationManager(initial_contamination=0.1)
+        
         # Legacy telecom protocol ports (kept for backward compatibility)
         self.telecom_ports = {
             'CPRI': [8080, 8081, 8082],
@@ -97,16 +101,19 @@ class TelecomAnomalyDetector:
         else:
             self._create_new_model()
     
-    def _create_new_model(self) -> None:
-        """Create new Isolation Forest model."""
+    def _create_new_model(self, contamination: float = None) -> None:
+        """Create new Isolation Forest model with adaptive contamination."""
+        if contamination is None:
+            contamination = self.contamination_manager.current_contamination
+        
         self.isolation_forest = IsolationForest(
-            contamination=0.1,  # Expect 10% anomalies
+            contamination=contamination,
             random_state=42,
             n_estimators=100,
             max_samples='auto',
             n_jobs=-1
         )
-        self.logger.info("Created new Isolation Forest model")
+        self.logger.info(f"Created new Isolation Forest model with contamination: {contamination:.1%}")
     
     def save_model(self) -> None:
         """Save trained model to disk."""
@@ -705,10 +712,13 @@ class TelecomAnomalyDetector:
         if not self.model_trained or len(all_features) > 0:
             self.train_model(all_features)
         
-        # Detect anomalies and only display if found
+        # Detect anomalies and adapt contamination factor
         total_anomalies = 0
         any_anomalies_found = False
+        detected_anomalies = []
+        network_conditions = {}
         
+        # First pass: count anomalies and assess network conditions
         for result in all_results:
             if 'features' in result:
                 prediction, anomaly_score = self.predict_anomalies(result['features'])
@@ -719,6 +729,54 @@ class TelecomAnomalyDetector:
                 low_anomaly_score = anomaly_score < -0.1
                 
                 is_anomaly = ml_anomaly_detected or has_specific_anomalies or low_anomaly_score
+                
+                if is_anomaly:
+                    detected_anomalies.append(result)
+                    
+                # Collect network condition indicators
+                if 'anomalies' in result:
+                    for anomaly in result['anomalies']:
+                        anomaly_type = anomaly.get('type', '')
+                        if 'unknown_protocol' in anomaly_type:
+                            network_conditions['unknown_protocol_ratio'] = network_conditions.get('unknown_protocol_ratio', 0) + 0.1
+                        elif 'unidirectional' in anomaly_type:
+                            network_conditions['unidirectional_communications'] = network_conditions.get('unidirectional_communications', 0) + 1
+                        elif 'missing_plane' in anomaly_type:
+                            network_conditions['missing_plane_events'] = network_conditions.get('missing_plane_events', 0) + 1
+                        elif 'rapid_cycle' in anomaly_type:
+                            network_conditions['rapid_ue_cycling'] = network_conditions.get('rapid_ue_cycling', 0) + 1
+        
+        # Calculate current anomaly rate
+        current_anomaly_rate = len(detected_anomalies) / max(len(all_results), 1)
+        
+        # Adapt contamination factor based on observed conditions
+        if len(all_results) >= 5:  # Need sufficient data for adaptation
+            new_contamination = self.contamination_manager.calculate_adaptive_contamination(
+                current_anomaly_rate,
+                network_conditions
+            )
+            
+            # Retrain model if contamination changed significantly
+            if abs(new_contamination - self.contamination_manager.current_contamination) > 0.05:
+                self.logger.info(f"Retraining model with new contamination: {new_contamination:.1%}")
+                self._create_new_model(new_contamination)
+                if all_features:
+                    self.train_model(all_features)
+                
+                # Re-analyze with updated model
+                detected_anomalies = []
+                for result in all_results:
+                    if 'features' in result:
+                        prediction, anomaly_score = self.predict_anomalies(result['features'])
+                        has_specific_anomalies = 'anomalies' in result and len(result['anomalies']) > 0
+                        ml_anomaly_detected = prediction == -1
+                        low_anomaly_score = anomaly_score < -0.1
+                        is_anomaly = ml_anomaly_detected or has_specific_anomalies or low_anomaly_score
+                        if is_anomaly:
+                            detected_anomalies.append(result)
+        
+        # Display results for detected anomalies
+        for result in detected_anomalies:
                 
                 if is_anomaly:
                     if not any_anomalies_found:
