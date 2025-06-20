@@ -80,16 +80,14 @@ class ProductionProtocolMapper:
         """Initialize MAC address patterns for device identification."""
         return {
             'DU_PATTERNS': [
-                '00:11:22:33:44:67',  # User-specific DU MACs
-                '00:11:22:33:44:66',
-                '00:1[0-9a-f]:22:33:44:[0-9a-f]{2}',  # DU MAC pattern
-                '02:[0-9a-f]{2}:22:33:44:[0-9a-f]{2}',  # Alternative DU pattern
-                '([0-9a-f]{2}:){5}[0-9a-f]{2}'  # Generic pattern fallback
+                '00:11:22:33:44:67',  # Actual DU MAC address
+                '00:11:22:33:44:[0-9a-f]{2}',  # DU device family pattern
+                '00:11:22:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}',  # DU vendor pattern
             ],
             'RU_PATTERNS': [
-                '00:1[0-9a-f]:11:22:33:[0-9a-f]{2}',  # RU MAC pattern
-                '01:[0-9a-f]{2}:11:22:33:[0-9a-f]{2}',  # Alternative RU pattern
-                '([0-9a-f]{2}:){5}[0-9a-f]{2}'  # Generic pattern fallback
+                '6c:ad:ad:00:03:2a',  # Actual RU MAC address
+                '6c:ad:ad:00:03:[0-9a-f]{2}',  # RU device family pattern
+                '6c:ad:ad:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}',  # RU vendor pattern
             ]
         }
     

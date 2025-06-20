@@ -17,8 +17,8 @@ def create_normal_mac_pcap():
     print("Creating normal PCAP with MAC-based detection...")
     
     packets = []
-    du_mac = "00:11:22:33:44:67"  # User's specific DU MAC
-    ru_mac = "AA:BB:CC:DD:EE:FF"  # RU MAC matching our patterns
+    du_mac = "00:11:22:33:44:67"  # Actual DU MAC address
+    ru_mac = "6c:ad:ad:00:03:2a"  # Actual RU MAC address
     
     # Create 200 packets with balanced bidirectional communication
     for i in range(200):
@@ -46,8 +46,8 @@ def create_unidirectional_mac_anomaly():
     print("Creating unidirectional MAC anomaly PCAP...")
     
     packets = []
-    du_mac = "00:11:22:33:44:66"  # User's second specific DU MAC
-    ru_mac = "AA:BB:CC:DD:EE:11"  # RU MAC matching our patterns
+    du_mac = "00:11:22:33:44:67"  # Actual DU MAC address
+    ru_mac = "6c:ad:ad:00:03:2a"  # Actual RU MAC address
     
     # Create 200 packets - only DU to RU, no responses
     for i in range(200):
@@ -75,8 +75,8 @@ def create_missing_plane_mac_anomaly():
     print("Creating missing plane MAC anomaly PCAP...")
     
     packets = []
-    du_mac = "00:11:22:33:44:67"  # User's specific DU MAC
-    ru_mac = "AA:BB:CC:DD:EE:22"  # RU MAC matching our patterns
+    du_mac = "00:11:22:33:44:67"  # Actual DU MAC address
+    ru_mac = "6c:ad:ad:00:03:2a"  # Actual RU MAC address
     
     # Create 160 packets - only control plane, no user plane
     for i in range(160):

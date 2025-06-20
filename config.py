@@ -58,16 +58,16 @@ class Config:
         self.FEATURE_WINDOW_SIZE: int = 1000  # Packets per analysis window
         self.MIN_FLOW_PACKETS: int = 5  # Minimum packets to consider a flow
         
-        # RU-DU communication patterns based on MAC addresses
+        # RU-DU communication patterns based on actual MAC addresses
         self.RU_MAC_PATTERNS: List[str] = [
-            "AA:BB:CC:",   # RU vendor prefix 1
-            "44:55:66:",   # RU vendor prefix 2
-            "88:99:AA:",   # RU vendor prefix 3
+            "6c:ad:ad:00:03:2a",   # Actual RU MAC address
+            "6c:ad:ad:00:03:",     # RU device family pattern
+            "6c:ad:ad:",           # RU vendor prefix
         ]
         
         self.DU_MAC_PATTERNS: List[str] = [
-            "00:11:22:33:44:67",   # Specific DU MAC address 1
-            "00:11:22:33:44:66",   # Specific DU MAC address 2
+            "00:11:22:33:44:67",   # Actual DU MAC address
+            "00:11:22:33:44:",     # DU device family pattern
             "00:11:22:",           # DU vendor prefix for other devices
         ]
         

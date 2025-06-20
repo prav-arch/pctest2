@@ -134,6 +134,13 @@ Changelog:
   * Enhanced MAC address detection with regex patterns for flexible vendor matching
   * Maintained consistent 28-feature extraction regardless of protocol name variations
   * Ensured Isolation Forest compatibility across mixed vendor environments without retraining
+- June 20, 2025. Updated with actual RU and DU MAC addresses:
+  * Configured system with real hardware MAC addresses: RU (6c:ad:ad:00:03:2a) and DU (00:11:22:33:44:67)
+  * Updated all configuration files and protocol mappers with actual addresses
+  * Created device family patterns for scalable detection of similar hardware
+  * Verified RU-DU communication detection works correctly with real addresses
+  * Generated updated sample data using actual MAC addresses for testing
+  * Maintained production flexibility while ensuring accurate device identification
 ```
 
 ## User Preferences
