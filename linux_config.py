@@ -51,30 +51,12 @@ class LinuxConfig:
         self.UE_RATIO_THRESHOLD: float = 0.2          # <20% or >80% attach ratio is anomaly
         self.RAPID_CYCLE_THRESHOLD: int = 10          # >10 cycles per minute is anomaly
         
-        # Protocol port mappings (hardcoded)
-        self.PROTOCOL_PORTS = {
-            38472: {'protocol': 'F1_C', 'plane': 'control'},    # F1-C Control
-            2152: {'protocol': 'F1_U', 'plane': 'user'},        # F1-U User
-            36412: {'protocol': 'NGAP', 'plane': 'control'},    # NG-AP
-            36413: {'protocol': 'S1_MME', 'plane': 'control'},  # S1-MME
-            4789: {'protocol': 'VXLAN', 'plane': 'user'},       # VXLAN
-            2123: {'protocol': 'GTP_C', 'plane': 'control'},    # GTP-C
-            2152: {'protocol': 'GTP_U', 'plane': 'user'}        # GTP-U
-        }
-        
-        # RU IP patterns (hardcoded for Linux deployment)
-        self.RU_IP_PATTERNS = [
-            "192.168.1.",    # RU subnet 1
-            "10.0.1.",       # RU subnet 2
-            "172.16.1."      # RU subnet 3
-        ]
-        
-        # DU IP patterns (hardcoded for Linux deployment)
-        self.DU_IP_PATTERNS = [
-            "192.168.2.",    # DU subnet 1
-            "10.0.2.",       # DU subnet 2
-            "172.16.2."      # DU subnet 3
-        ]
+        # Import telecom standards from base config
+        from config import Config
+        base_config = Config()
+        self.PROTOCOL_PORTS = base_config.PROTOCOL_PORTS
+        self.RU_IP_PATTERNS = base_config.RU_IP_PATTERNS
+        self.DU_IP_PATTERNS = base_config.DU_IP_PATTERNS
         
         # Processing configuration
         self.BATCH_SIZE: int = 1000

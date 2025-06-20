@@ -115,6 +115,17 @@ class Config:
             }
         }
         
+        # Protocol port mappings (telecom standards)
+        self.PROTOCOL_PORTS = {
+            38472: {'protocol': 'F1_C', 'plane': 'control'},    # F1-C Control
+            2152: {'protocol': 'F1_U', 'plane': 'user'},        # F1-U User
+            36412: {'protocol': 'NGAP', 'plane': 'control'},    # NG-AP
+            36413: {'protocol': 'S1_MME', 'plane': 'control'},  # S1-MME
+            4789: {'protocol': 'VXLAN', 'plane': 'user'},       # VXLAN
+            2123: {'protocol': 'GTP_C', 'plane': 'control'},    # GTP-C
+            2152: {'protocol': 'GTP_U', 'plane': 'user'}        # GTP-U
+        }
+        
         # HDF file structure expectations
         self.HDF_EXPECTED_DATASETS: List[str] = [
             'ue_events',
