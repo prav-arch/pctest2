@@ -595,31 +595,41 @@ class TelecomAnomalyDetector:
         if not self.model_trained or len(all_features) > 0:
             self.train_model(all_features)
         
-        # Detect anomalies
-        self.logger.info("\n" + "="*80)
-        self.logger.info("ANOMALY DETECTION RESULTS")
-        self.logger.info("="*80)
-        
+        # Detect anomalies and only display if found
         total_anomalies = 0
+        any_anomalies_found = False
         
         for result in all_results:
             if 'features' in result:
                 prediction, anomaly_score = self.predict_anomalies(result['features'])
-                
-                # Display results
-                self._display_file_results(result, prediction, anomaly_score)
                 
                 # Count anomalies based on comprehensive detection
                 has_specific_anomalies = 'anomalies' in result and len(result['anomalies']) > 0
                 ml_anomaly_detected = prediction == -1
                 low_anomaly_score = anomaly_score < -0.1
                 
-                if ml_anomaly_detected or has_specific_anomalies or low_anomaly_score:
+                is_anomaly = ml_anomaly_detected or has_specific_anomalies or low_anomaly_score
+                
+                if is_anomaly:
+                    if not any_anomalies_found:
+                        # Print header only when first anomaly is found
+                        print("\n" + "="*80)
+                        print("TELECOM ANOMALY DETECTION RESULTS")
+                        print("="*80)
+                        any_anomalies_found = True
+                    
+                    # Display results only for anomalous files
+                    self._display_file_results(result, prediction, anomaly_score)
                     total_anomalies += 1
         
-        self.logger.info(f"\nTotal files processed: {len(all_results)}")
-        self.logger.info(f"Total anomalies detected: {total_anomalies}")
-        self.logger.info(f"Anomaly rate: {total_anomalies/len(all_results)*100:.2f}%" if all_results else "N/A")
+        # Only display summary if anomalies were found
+        if any_anomalies_found:
+            print(f"\n" + "="*80)
+            print(f"SUMMARY:")
+            print(f"Total files processed: {len(all_results)}")
+            print(f"Anomalies detected: {total_anomalies}")
+            print(f"Anomaly rate: {total_anomalies/len(all_results)*100:.2f}%")
+            print("="*80)
     
     def _display_file_results(self, result: Dict, prediction: int, anomaly_score: float) -> None:
         """Display analysis results for a single file."""
@@ -633,11 +643,15 @@ class TelecomAnomalyDetector:
         # Consider it an anomaly if either ML detected it OR specific anomalies found
         is_anomaly = ml_anomaly_detected or has_specific_anomalies or low_anomaly_score
         
+        # Only display output if anomalies are detected
+        if not is_anomaly:
+            return
+        
         print(f"\n{'='*60}")
         print(f"FILE: {filename}")
         print(f"{'='*60}")
         print(f"Type: {'PCAP' if 'packet_count' in result else 'HDF'}")
-        print(f"Anomaly Status: {'ANOMALY DETECTED' if is_anomaly else 'NORMAL'}")
+        print(f"Anomaly Status: ANOMALY DETECTED")
         print(f"Anomaly Score: {anomaly_score:.4f} (lower = more anomalous)")
         print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
@@ -784,21 +798,14 @@ class TelecomAnomalyDetector:
 
 def main():
     """Main function to run the telecom anomaly detector."""
-    print("Telecom Anomaly Detection System")
-    print("=" * 50)
-    print("Using Isolation Forest for Unsupervised Learning")
-    print("Analyzing PCAP and HDF files for telecom anomalies...")
-    print(f"Python Directory: /usr/bin/python3")
-    print()
-    
     try:
         detector = TelecomAnomalyDetector()
         detector.process_all_files()
         
     except KeyboardInterrupt:
-        print("\n\nOperation cancelled by user.")
+        print("\nOperation cancelled by user.")
     except Exception as e:
-        print(f"\n\nError: {e}")
+        print(f"Error: {e}")
         import traceback
         traceback.print_exc()
 

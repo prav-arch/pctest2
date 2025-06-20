@@ -26,13 +26,12 @@ def setup_logging(log_level: str = "INFO", log_file: str = "./telecom_anomaly_de
     # Create logs directory if it doesn't exist
     os.makedirs(os.path.dirname(log_file) if os.path.dirname(log_file) else "./", exist_ok=True)
     
-    # Configure logging
+    # Configure logging - file only for silent operation
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
+            logging.FileHandler(log_file)
         ]
     )
     
