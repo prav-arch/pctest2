@@ -482,9 +482,23 @@ class TelecomAnomalyDetector:
             return
         
         try:
+            # Ensure all feature vectors have the same length
+            max_length = max(len(features) for features in all_features)
+            normalized_features = []
+            
+            for features in all_features:
+                # Pad shorter feature vectors with zeros
+                if len(features) < max_length:
+                    padded_features = features + [0.0] * (max_length - len(features))
+                else:
+                    padded_features = features[:max_length]  # Truncate if longer
+                normalized_features.append(padded_features)
+            
             # Convert to numpy array and handle any missing values
-            X = np.array(all_features)
+            X = np.array(normalized_features)
             X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+            
+            self.logger.info(f"Training data shape: {X.shape}")
             
             # Scale features
             X_scaled = self.scaler.fit_transform(X)
@@ -493,13 +507,16 @@ class TelecomAnomalyDetector:
             self.isolation_forest.fit(X_scaled)
             self.model_trained = True
             
-            self.logger.info(f"Model trained on {len(all_features)} samples with {X.shape[1]} features")
+            self.logger.info(f"Model trained successfully on {len(all_features)} samples with {X.shape[1]} features")
             
             # Save the trained model
             self.save_model()
             
         except Exception as e:
             self.logger.error(f"Error training model: {e}")
+            import traceback
+            traceback.print_exc()
+            self.model_trained = False
     
     def predict_anomalies(self, features: List[float]) -> Tuple[int, float]:
         """
