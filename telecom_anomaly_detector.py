@@ -11,6 +11,7 @@ import logging
 import pickle
 import numpy as np
 import pandas as pd
+import argparse
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
@@ -45,8 +46,10 @@ class TelecomAnomalyDetector:
     Processes PCAP files for protocol analysis and HDF files for UE events.
     """
     
-    def __init__(self):
+    def __init__(self, python_directory=None):
         self.config = Config()
+        if python_directory:
+            self.config.PYTHON_DIRECTORY = python_directory
         self.logger = setup_logging()
         self.isolation_forest = None
         self.scaler = StandardScaler()
@@ -608,7 +611,7 @@ class TelecomAnomalyDetector:
         print(f"FILE: {filename}")
         print(f"{'='*60}")
         print(f"Type: {'PCAP' if 'packet_count' in result else 'HDF'}")
-        print(f"Anomaly Status: {'🚨 ANOMALY DETECTED' if is_anomaly else '✅ NORMAL'}")
+        print(f"Anomaly Status: {'ANOMALY DETECTED' if is_anomaly else 'NORMAL'}")
         print(f"Anomaly Score: {anomaly_score:.4f} (lower = more anomalous)")
         print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
@@ -616,8 +619,7 @@ class TelecomAnomalyDetector:
         if 'anomalies' in result and result['anomalies']:
             print(f"\nDetected Issues ({len(result['anomalies'])}):")
             for i, anomaly in enumerate(result['anomalies'], 1):
-                severity_emoji = {'high': '🔴', 'medium': '🟡', 'low': '🟢'}.get(anomaly.get('severity', 'low'), '🔵')
-                print(f"  {i}. {severity_emoji} [{anomaly.get('severity', 'unknown').upper()}] {anomaly.get('type', 'unknown')}")
+                print(f"  {i}. [{anomaly.get('severity', 'unknown').upper()}] {anomaly.get('type', 'unknown')}")
                 print(f"     Description: {anomaly.get('description', 'No description')}")
                 
                 # Display specific packet/event logs for this anomaly
@@ -654,7 +656,7 @@ class TelecomAnomalyDetector:
         """Display specific log details for an anomaly."""
         anomaly_type = anomaly.get('type', 'unknown')
         
-        print(f"\n     📋 ANOMALY LOG DETAILS:")
+        print(f"\n     ANOMALY LOG DETAILS:")
         
         if anomaly_type == 'unidirectional_communication':
             # Display specific DU packets that have no RU response
@@ -744,20 +746,27 @@ class TelecomAnomalyDetector:
                     cell_id = event.get('cell_id', 'unknown')
                     print(f"        {j}. UE {ue_id} detached from {cell_id} at {timestamp}")
         
-        print(f"     📁 Log file: {filename}")
+        print(f"     Log file: {filename}")
         print()
 
 
 def main():
     """Main function to run the telecom anomaly detector."""
+    parser = argparse.ArgumentParser(description='Telecom Anomaly Detection System')
+    parser.add_argument('--python-dir', type=str, default='/usr/bin/python3',
+                       help='Python directory path (default: /usr/bin/python3)')
+    
+    args = parser.parse_args()
+    
     print("Telecom Anomaly Detection System")
     print("=" * 50)
     print("Using Isolation Forest for Unsupervised Learning")
     print("Analyzing PCAP and HDF files for telecom anomalies...")
+    print(f"Python Directory: {args.python_dir}")
     print()
     
     try:
-        detector = TelecomAnomalyDetector()
+        detector = TelecomAnomalyDetector(python_directory=args.python_dir)
         detector.process_all_files()
         
     except KeyboardInterrupt:

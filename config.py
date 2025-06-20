@@ -10,6 +10,9 @@ class Config:
     """Configuration class with hardcoded paths and parameters."""
     
     def __init__(self):
+        # Python script directory (configurable)
+        self.PYTHON_DIRECTORY: str = "/usr/bin/python3"  # Default Python path
+        
         # Hardcoded directory paths for PCAP files
         self.PCAP_DIRS: List[str] = [
             "/data/pcap",
