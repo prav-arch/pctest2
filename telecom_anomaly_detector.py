@@ -54,7 +54,11 @@ class TelecomAnomalyDetector:
         self.model_trained = False
         self.feature_columns = []
         
-        # Telecom protocol ports and identifiers
+        # Initialize production protocol mapper for flexible protocol detection
+        from production_protocol_mapper import ProductionProtocolMapper
+        self.protocol_mapper = ProductionProtocolMapper()
+        
+        # Legacy telecom protocol ports (kept for backward compatibility)
         self.telecom_ports = {
             'CPRI': [8080, 8081, 8082],
             'eCPRI': [3200, 3201, 3202],
@@ -240,7 +244,28 @@ class TelecomAnomalyDetector:
             return {'error': str(e), 'file': pcap_path}
     
     def _identify_protocol(self, packet) -> Dict:
-        """Identify telecom protocol from packet."""
+        """Identify telecom protocol from packet using production-ready mapping."""
+        # First try the flexible production protocol mapper
+        try:
+            # Extract packet payload for deep inspection
+            packet_payload = None
+            if hasattr(packet, 'load'):
+                packet_payload = packet.load
+            elif hasattr(packet, 'payload'):
+                packet_payload = bytes(packet.payload)
+            
+            protocol_info = self.protocol_mapper.identify_protocol(packet, packet_payload)
+            
+            # If confidence is high enough, use the result
+            if protocol_info.get('confidence', 0) > 0.5:
+                return {
+                    'protocol': protocol_info['protocol'],
+                    'plane': protocol_info['plane']
+                }
+        except Exception as e:
+            self.logger.debug(f"Production mapper failed, using fallback: {e}")
+        
+        # Fallback to legacy port-based identification
         protocol_info = {'protocol': 'unknown', 'plane': 'other'}
         
         if packet.haslayer(UDP):
@@ -278,11 +303,25 @@ class TelecomAnomalyDetector:
                (self._is_du_mac(src_mac) and self._is_ru_mac(dst_mac))
     
     def _is_du_mac(self, mac: str) -> bool:
-        """Check if MAC address belongs to DU."""
+        """Check if MAC address belongs to DU using production-ready patterns."""
+        if not mac:
+            return False
+        # Use production mapper first
+        device_type = self.protocol_mapper.identify_device_type(mac)
+        if device_type == 'DU':
+            return True
+        # Fallback to config-based detection
         return self.config.is_du_mac(mac)
     
     def _is_ru_mac(self, mac: str) -> bool:
-        """Check if MAC address belongs to RU."""
+        """Check if MAC address belongs to RU using production-ready patterns."""
+        if not mac:
+            return False
+        # Use production mapper first
+        device_type = self.protocol_mapper.identify_device_type(mac)
+        if device_type == 'RU':
+            return True
+        # Fallback to config-based detection
         return self.config.is_ru_mac(mac)
     
     def _detect_communication_anomalies(self, protocol_stats, flow_stats, 
