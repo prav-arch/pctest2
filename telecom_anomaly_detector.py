@@ -345,9 +345,17 @@ class TelecomAnomalyDetector:
             if u_plane_ratio < 0.1:  # Less than 10% user plane
                 # Get sample control plane packets that are present
                 sample_c_packets = plane_separation.get('c_plane_packets', [])[:3]
+                context = {
+                    'affected_devices': 1,
+                    'packet_loss_rate': 1.0 - u_plane_ratio,
+                    'duration_minutes': 15,
+                    'is_business_hours': True,
+                    'anomaly_score': -0.5
+                }
                 anomalies.append({
                     'type': 'missing_user_plane',
                     'description': f"Very low user plane traffic: {u_plane_ratio:.2%}",
+                    'context': context,
                     'severity': 'medium',
                     'details': plane_separation,
                     'sample_packets': sample_c_packets,
@@ -427,9 +435,17 @@ class TelecomAnomalyDetector:
                 # Get sample events for logging
                 sample_attach_events = attach_events[:3] if attach_events else []
                 sample_detach_events = detach_events[:3] if detach_events else []
+                context = {
+                    'affected_devices': len(set([e.get('ue_id') for e in attach_events + detach_events])),
+                    'packet_loss_rate': abs(attach_ratio - detach_ratio),
+                    'duration_minutes': 20,
+                    'is_business_hours': True,
+                    'anomaly_score': -0.3
+                }
                 anomalies.append({
                     'type': 'unbalanced_attach_detach',
                     'description': f"Unbalanced attach/detach ratio: {attach_ratio:.2%} attach, {detach_ratio:.2%} detach",
+                    'context': context,
                     'severity': 'medium',
                     'details': {'attach_count': len(attach_events), 'detach_count': len(detach_events)},
                     'sample_attach_events': sample_attach_events,
@@ -465,7 +481,34 @@ class TelecomAnomalyDetector:
                     'total_ue_detach_events': len([e for e in detach_events if e.get('ue_id') == ue_id])
                 })
         
-        return anomalies
+        return self._apply_severity_classification(anomalies)
+    
+    def _apply_severity_classification(self, anomalies: List[Dict]) -> List[Dict]:
+        """Apply severity classification to detected anomalies."""
+        classified_anomalies = []
+        
+        for anomaly in anomalies:
+            anomaly_type = anomaly.get('type', 'unknown')
+            context = anomaly.get('context', {})
+            
+            # Apply severity classification
+            classification = self.severity_classifier.classify_anomaly(anomaly_type, context)
+            
+            # Add classification information to anomaly
+            anomaly['severity_classification'] = classification
+            anomaly['severity_level'] = classification.severity.value
+            anomaly['priority_score'] = classification.priority_score
+            anomaly['impact_description'] = classification.impact_description
+            anomaly['recommended_action'] = classification.recommended_action
+            anomaly['response_time'] = classification.response_time
+            anomaly['escalation_required'] = classification.escalation_required
+            
+            classified_anomalies.append(anomaly)
+        
+        # Sort by priority score (highest first)
+        classified_anomalies.sort(key=lambda x: x.get('priority_score', 0), reverse=True)
+        
+        return classified_anomalies
     
     def _extract_hdf_features(self, hdf_data: Dict, attach_events: List, detach_events: List) -> List[float]:
         """Extract features from HDF data for anomaly detection."""
@@ -657,11 +700,41 @@ class TelecomAnomalyDetector:
             print(f"Total files processed: {len(all_results)}")
             print(f"Anomalies detected: {total_anomalies}")
             print(f"Anomaly rate: {total_anomalies/len(all_results)*100:.2f}%")
+            
+            # Display severity distribution
+            self._display_severity_summary(all_results)
             print("="*80)
         else:
             # Only print if files were actually processed
             if all_results:
                 print("no anomalies found")
+    
+    def _display_severity_summary(self, all_results: List[Dict]) -> None:
+        """Display severity distribution summary."""
+        all_classifications = []
+        
+        # Collect all severity classifications
+        for result in all_results:
+            if 'anomalies' in result:
+                for anomaly in result['anomalies']:
+                    if 'severity_classification' in anomaly:
+                        all_classifications.append(anomaly['severity_classification'])
+        
+        if not all_classifications:
+            return
+        
+        # Get severity statistics
+        stats = self.severity_classifier.get_severity_statistics(all_classifications)
+        
+        print(f"\nSEVERITY DISTRIBUTION:")
+        print(f"  CRITICAL: {stats['counts'][SeverityLevel.CRITICAL]} ({stats['percentages'][SeverityLevel.CRITICAL]:.1f}%)")
+        print(f"  HIGH:     {stats['counts'][SeverityLevel.HIGH]} ({stats['percentages'][SeverityLevel.HIGH]:.1f}%)")
+        print(f"  MEDIUM:   {stats['counts'][SeverityLevel.MEDIUM]} ({stats['percentages'][SeverityLevel.MEDIUM]:.1f}%)")
+        print(f"  LOW:      {stats['counts'][SeverityLevel.LOW]} ({stats['percentages'][SeverityLevel.LOW]:.1f}%)")
+        print(f"  INFO:     {stats['counts'][SeverityLevel.INFO]} ({stats['percentages'][SeverityLevel.INFO]:.1f}%)")
+        
+        if stats['escalation_required'] > 0:
+            print(f"\nESCALATION REQUIRED: {stats['escalation_required']} high-priority anomalies need immediate attention")
     
     def _display_file_results(self, result: Dict, prediction: int, anomaly_score: float) -> None:
         """Display analysis results for a single file."""
@@ -697,8 +770,22 @@ class TelecomAnomalyDetector:
         if 'anomalies' in result and result['anomalies']:
             print(f"\nDetected Issues ({len(result['anomalies'])}):")
             for i, anomaly in enumerate(result['anomalies'], 1):
-                print(f"  {i}. [{anomaly.get('severity', 'unknown').upper()}] {anomaly.get('type', 'unknown')}")
+                severity_level = anomaly.get('severity_level', 'UNKNOWN')
+                priority_score = anomaly.get('priority_score', 0.0)
+                
+                print(f"  {i}. [{severity_level}] {anomaly.get('type', 'unknown')}")
+                print(f"     Priority Score: {priority_score:.3f}")
                 print(f"     Description: {anomaly.get('description', 'No description')}")
+                
+                # Display severity classification details
+                if 'impact_description' in anomaly:
+                    print(f"     Impact: {anomaly['impact_description']}")
+                if 'response_time' in anomaly:
+                    print(f"     Response Time: {anomaly['response_time']}")
+                if 'escalation_required' in anomaly and anomaly['escalation_required']:
+                    print(f"     ⚠️  ESCALATION REQUIRED")
+                if 'recommended_action' in anomaly:
+                    print(f"     Action: {anomaly['recommended_action']}")
                 
                 # Display specific packet/event logs for this anomaly
                 self._display_anomaly_logs(anomaly, result.get('file', 'Unknown'))
