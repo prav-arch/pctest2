@@ -55,8 +55,8 @@ class LinuxConfig:
         from config import Config
         base_config = Config()
         self.PROTOCOL_PORTS = base_config.PROTOCOL_PORTS
-        self.RU_IP_PATTERNS = base_config.RU_IP_PATTERNS
-        self.DU_IP_PATTERNS = base_config.DU_IP_PATTERNS
+        self.RU_MAC_PATTERNS = base_config.RU_MAC_PATTERNS
+        self.DU_MAC_PATTERNS = base_config.DU_MAC_PATTERNS
         
         # Processing configuration
         self.BATCH_SIZE: int = 1000
@@ -103,13 +103,19 @@ class LinuxConfig:
                 existing_dirs.append(directory)
         return existing_dirs
     
-    def is_ru_ip(self, ip: str) -> bool:
-        """Check if IP address matches RU patterns."""
-        return any(ip.startswith(pattern) for pattern in self.RU_IP_PATTERNS)
+    def is_ru_mac(self, mac: str) -> bool:
+        """Check if MAC address matches RU patterns."""
+        if not mac:
+            return False
+        mac_upper = mac.upper()
+        return any(mac_upper.startswith(pattern.upper()) for pattern in self.RU_MAC_PATTERNS)
     
-    def is_du_ip(self, ip: str) -> bool:
-        """Check if IP address matches DU patterns."""
-        return any(ip.startswith(pattern) for pattern in self.DU_IP_PATTERNS)
+    def is_du_mac(self, mac: str) -> bool:
+        """Check if MAC address matches DU patterns."""
+        if not mac:
+            return False
+        mac_upper = mac.upper()
+        return any(mac_upper.startswith(pattern.upper()) for pattern in self.DU_MAC_PATTERNS)
     
     def get_protocol_info(self, port: int) -> dict:
         """Get protocol information based on port number."""

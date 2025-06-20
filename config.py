@@ -58,17 +58,17 @@ class Config:
         self.FEATURE_WINDOW_SIZE: int = 1000  # Packets per analysis window
         self.MIN_FLOW_PACKETS: int = 5  # Minimum packets to consider a flow
         
-        # RU-DU communication patterns
-        self.RU_IP_PATTERNS: List[str] = [
-            "192.168.1.",  # Default RU subnet
-            "10.0.1.",     # Alternative RU subnet
-            "172.16.1."    # Another RU subnet
+        # RU-DU communication patterns based on MAC addresses
+        self.RU_MAC_PATTERNS: List[str] = [
+            "00:11:22:",   # RU vendor prefix 1
+            "AA:BB:CC:",   # RU vendor prefix 2
+            "44:55:66:",   # RU vendor prefix 3
         ]
         
-        self.DU_IP_PATTERNS: List[str] = [
-            "192.168.2.",  # Default DU subnet
-            "10.0.2.",     # Alternative DU subnet
-            "172.16.2."    # Another DU subnet
+        self.DU_MAC_PATTERNS: List[str] = [
+            "00:11:22:33:44:67",   # Specific DU MAC address 1
+            "00:11:22:33:44:66",   # Specific DU MAC address 2
+            "00:11:22:",           # DU vendor prefix for other devices
         ]
         
         # Telecom protocol configurations
@@ -168,13 +168,24 @@ class Config:
         """Get list of existing HDF directories."""
         return [d for d in self.HDF_DIRS if os.path.exists(d)]
     
-    def is_ru_ip(self, ip: str) -> bool:
-        """Check if IP address matches RU patterns."""
-        return any(ip.startswith(pattern) for pattern in self.RU_IP_PATTERNS)
+    def is_ru_mac(self, mac: str) -> bool:
+        """Check if MAC address matches RU patterns."""
+        if not mac:
+            return False
+        mac_upper = mac.upper()
+        return any(mac_upper.startswith(pattern.upper()) for pattern in self.RU_MAC_PATTERNS)
     
-    def is_du_ip(self, ip: str) -> bool:
-        """Check if IP address matches DU patterns."""
-        return any(ip.startswith(pattern) for pattern in self.DU_IP_PATTERNS)
+    def is_du_mac(self, mac: str) -> bool:
+        """Check if MAC address matches DU patterns."""
+        if not mac:
+            return False
+        mac_upper = mac.upper()
+        for pattern in self.DU_MAC_PATTERNS:
+            pattern_upper = pattern.upper()
+            # Check for exact match or prefix match
+            if mac_upper == pattern_upper or mac_upper.startswith(pattern_upper):
+                return True
+        return False
     
     def get_protocol_info(self, port: int) -> dict:
         """Get protocol information based on port number."""

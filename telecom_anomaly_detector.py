@@ -146,12 +146,18 @@ class TelecomAnomalyDetector:
                 src_ip = ip_layer.src
                 dst_ip = ip_layer.dst
                 
+                # Extract MAC addresses
+                src_mac = packet[Ether].src if packet.haslayer(Ether) else None
+                dst_mac = packet[Ether].dst if packet.haslayer(Ether) else None
+                
                 # Create detailed packet log
                 packet_log = {
                     'packet_index': i,
                     'timestamp': packet.time if hasattr(packet, 'time') else None,
                     'src_ip': src_ip,
                     'dst_ip': dst_ip,
+                    'src_mac': src_mac,
+                    'dst_mac': dst_mac,
                     'size': len(packet),
                     'protocol': 'unknown',
                     'plane': 'other',
@@ -192,14 +198,14 @@ class TelecomAnomalyDetector:
                 flow_stats[flow_key]['bytes'] += len(packet)
                 flow_stats[flow_key]['directions'].add(f"{src_ip}->{dst_ip}")
                 
-                # Track RU-DU communications with packet details
-                if self._is_ru_du_communication(src_ip, dst_ip):
-                    if self._is_du_ip(src_ip):
-                        comm_key = f"{src_ip}-{dst_ip}"
+                # Track RU-DU communications with packet details based on MAC addresses
+                if self._is_ru_du_communication(src_mac, dst_mac):
+                    if self._is_du_mac(src_mac):
+                        comm_key = f"{src_mac}-{dst_mac}"
                         ru_du_communications[comm_key]['du_to_ru'] += 1
                         ru_du_communications[comm_key]['du_packets'].append(packet_log)
-                    elif self._is_ru_ip(src_ip):
-                        comm_key = f"{dst_ip}-{src_ip}"
+                    elif self._is_ru_mac(src_mac):
+                        comm_key = f"{dst_mac}-{src_mac}"
                         ru_du_communications[comm_key]['ru_to_du'] += 1
                         ru_du_communications[comm_key]['ru_packets'].append(packet_log)
             
@@ -260,20 +266,20 @@ class TelecomAnomalyDetector:
         
         return protocol_info
     
-    def _is_ru_du_communication(self, src_ip: str, dst_ip: str) -> bool:
-        """Check if communication is between RU and DU."""
-        # Simple heuristic: assume RU IPs start with 192.168.1.x and DU with 192.168.2.x
-        ru_pattern = src_ip.startswith('192.168.1.') or dst_ip.startswith('192.168.1.')
-        du_pattern = src_ip.startswith('192.168.2.') or dst_ip.startswith('192.168.2.')
-        return ru_pattern and du_pattern
+    def _is_ru_du_communication(self, src_mac: str, dst_mac: str) -> bool:
+        """Check if communication is between RU and DU based on MAC addresses."""
+        if not src_mac or not dst_mac:
+            return False
+        return (self._is_ru_mac(src_mac) and self._is_du_mac(dst_mac)) or \
+               (self._is_du_mac(src_mac) and self._is_ru_mac(dst_mac))
     
-    def _is_du_ip(self, ip: str) -> bool:
-        """Check if IP belongs to DU."""
-        return ip.startswith('192.168.2.')
+    def _is_du_mac(self, mac: str) -> bool:
+        """Check if MAC address belongs to DU."""
+        return self.config.is_du_mac(mac)
     
-    def _is_ru_ip(self, ip: str) -> bool:
-        """Check if IP belongs to RU."""
-        return ip.startswith('192.168.1.')
+    def _is_ru_mac(self, mac: str) -> bool:
+        """Check if MAC address belongs to RU."""
+        return self.config.is_ru_mac(mac)
     
     def _detect_communication_anomalies(self, protocol_stats, flow_stats, 
                                        ru_du_communications, plane_separation, packet_logs) -> List[Dict]:
