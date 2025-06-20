@@ -78,9 +78,9 @@ The application follows a modular architecture with clear separation of concerns
 - **Workflow**: Automated dependency installation and project execution
 
 ### Directory Structure
-- **Data Directories**: Multiple fallback paths for PCAP and HDF files
-- **Model Storage**: Local models directory for ML model persistence
-- **Logging**: Centralized logging with file and console output
+- **Data Directories**: Hardcoded Linux system paths with local fallbacks for development
+- **Model Storage**: Linux production paths (/var/lib/telecom/models) with local fallback
+- **Logging**: Linux system logging (/var/log/telecom/) with local fallback
 
 ### Scalability Considerations
 - **Unsupervised Learning**: No need for labeled training data
@@ -102,8 +102,10 @@ Changelog:
   * Hardcoded Linux directory paths for production deployment
   * Created linux_setup.sh script for automated system setup
   * Added linux_deployment_guide.md with comprehensive deployment instructions
-  * Removed command-line arguments in favor of hardcoded Linux paths
+  * Created linux_config.py for production-specific configuration
+  * Added dual-mode operation: development (local) and production (Linux system paths)
   * Configured system directories: /var/log/telecom/, /opt/telecom/, /data/telecom/
+  * Created wrapper scripts for seamless production deployment
 ```
 
 ## User Preferences
