@@ -13,32 +13,34 @@ class Config:
         # Python script directory (hardcoded for Linux)
         self.PYTHON_DIRECTORY: str = "/usr/bin/python3"
         
-        # Hardcoded Linux directory paths for PCAP files
+        # Hardcoded Linux directory paths for PCAP files (with local fallback)
         self.PCAP_DIRS: List[str] = [
             "/var/log/telecom/pcap",
             "/opt/telecom/pcap",
             "/data/telecom/pcap", 
             "/home/telecom/pcap",
             "/usr/local/telecom/pcap",
-            "/tmp/telecom/pcap"
+            "/tmp/telecom/pcap",
+            "./pcap_files"  # Local fallback for development
         ]
         
-        # Hardcoded Linux directory paths for HDF files
+        # Hardcoded Linux directory paths for HDF files (with local fallback)
         self.HDF_DIRS: List[str] = [
             "/var/log/telecom/hdf",
             "/opt/telecom/hdf",
             "/data/telecom/hdf",
             "/home/telecom/hdf", 
             "/usr/local/telecom/hdf",
-            "/tmp/telecom/hdf"
+            "/tmp/telecom/hdf",
+            "./hdf_files"  # Local fallback for development
         ]
         
-        # Model storage directory (Linux)
-        self.MODEL_DIR: str = "/var/lib/telecom/models"
+        # Model storage directory (Linux with local fallback)
+        self.MODEL_DIR: str = "./models"
         
-        # Logging configuration (Linux)
+        # Logging configuration (Linux with local fallback)
         self.LOG_LEVEL: str = "INFO"
-        self.LOG_FILE: str = "/var/log/telecom/telecom_anomaly_detection.log"
+        self.LOG_FILE: str = "./telecom_anomaly_detection.log"
         
         # Isolation Forest parameters
         self.CONTAMINATION_RATE: float = 0.1  # Expected anomaly rate (10%)
@@ -128,10 +130,10 @@ class Config:
         self.PARALLEL_PROCESSING: bool = True
         self.MAX_WORKERS: int = 4
         
-        # Output formatting (Linux)
+        # Output formatting (Linux with local fallback)
         self.DISPLAY_DETAILED_STATS: bool = True
         self.SAVE_RESULTS_TO_FILE: bool = True
-        self.RESULTS_OUTPUT_DIR: str = "/var/log/telecom/results"
+        self.RESULTS_OUTPUT_DIR: str = "./results"
         
         # Create necessary directories
         self._create_directories()
@@ -141,7 +143,7 @@ class Config:
         directories = [
             self.MODEL_DIR,
             self.RESULTS_OUTPUT_DIR,
-            "/var/log/telecom"
+            "./logs"
         ]
         
         for directory in directories:

@@ -23,8 +23,11 @@ sudo cp your_files.hdf5 /data/telecom/hdf/
 
 3. **Run the anomaly detector:**
 ```bash
-# Using symlink:
+# Development mode (uses local directories):
 telecom-detector
+
+# Production mode (uses Linux system directories):
+telecom-detector-production
 
 # Or directly:
 python3 /opt/telecom/bin/telecom_anomaly_detector.py

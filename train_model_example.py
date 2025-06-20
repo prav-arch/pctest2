@@ -14,7 +14,7 @@ def main():
     print("=" * 55)
     
     # Initialize the detector
-    detector = TelecomAnomalyDetector(python_directory="/usr/bin/python3")
+    detector = TelecomAnomalyDetector()
     
     # Check available data files
     pcap_files = []

@@ -71,11 +71,40 @@ echo "Installing telecom anomaly detector..."
 mkdir -p /opt/telecom/bin
 cp telecom_anomaly_detector.py /opt/telecom/bin/
 cp config.py /opt/telecom/bin/
+cp linux_config.py /opt/telecom/bin/
 cp utils.py /opt/telecom/bin/
 chmod +x /opt/telecom/bin/telecom_anomaly_detector.py
 
-# Create symlink for easy execution
+# Create production wrapper script
+cat > /opt/telecom/bin/telecom-detector-linux << 'EOF'
+#!/bin/bash
+# Production Linux wrapper for Telecom Anomaly Detector
+cd /opt/telecom/bin
+export PYTHONPATH="/opt/telecom/bin:$PYTHONPATH"
+python3 -c "
+import sys
+sys.path.insert(0, '/opt/telecom/bin')
+from telecom_anomaly_detector import TelecomAnomalyDetector, main
+from linux_config import LinuxConfig
+
+# Override config with Linux production settings
+class LinuxTelecomAnomalyDetector(TelecomAnomalyDetector):
+    def __init__(self):
+        super().__init__()
+        self.config = LinuxConfig()  # Use production Linux config
+
+if __name__ == '__main__':
+    import telecom_anomaly_detector
+    telecom_anomaly_detector.TelecomAnomalyDetector = LinuxTelecomAnomalyDetector
+    main()
+"
+EOF
+
+chmod +x /opt/telecom/bin/telecom-detector-linux
+
+# Create symlinks for easy execution
 ln -sf /opt/telecom/bin/telecom_anomaly_detector.py /usr/local/bin/telecom-detector
+ln -sf /opt/telecom/bin/telecom-detector-linux /usr/local/bin/telecom-detector-production
 
 echo "Installation completed successfully!"
 
