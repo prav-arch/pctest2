@@ -108,10 +108,10 @@ Changelog:
   * Created wrapper scripts for seamless production deployment
 - June 20, 2025. Silent operation mode implementation:
   * Modified system to only display output when anomalies are detected
-  * Completely silent operation when all files are normal (no console output)
+  * Prints "no anomalies found" when all files are normal
   * Logging redirected to file-only for production use
   * Maintains detailed anomaly reporting with packet logs and event details
-  * Optimized for Linux deployment where silence indicates normal operation
+  * Optimized for Linux deployment with clear status indication
 ```
 
 ## User Preferences

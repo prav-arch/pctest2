@@ -622,7 +622,7 @@ class TelecomAnomalyDetector:
                     self._display_file_results(result, prediction, anomaly_score)
                     total_anomalies += 1
         
-        # Only display summary if anomalies were found
+        # Display summary based on whether anomalies were found
         if any_anomalies_found:
             print(f"\n" + "="*80)
             print(f"SUMMARY:")
@@ -630,6 +630,10 @@ class TelecomAnomalyDetector:
             print(f"Anomalies detected: {total_anomalies}")
             print(f"Anomaly rate: {total_anomalies/len(all_results)*100:.2f}%")
             print("="*80)
+        else:
+            # Only print if files were actually processed
+            if all_results:
+                print("no anomalies found")
     
     def _display_file_results(self, result: Dict, prediction: int, anomaly_score: float) -> None:
         """Display analysis results for a single file."""
