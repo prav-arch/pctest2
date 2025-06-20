@@ -11,7 +11,6 @@ import logging
 import pickle
 import numpy as np
 import pandas as pd
-import argparse
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
@@ -46,10 +45,8 @@ class TelecomAnomalyDetector:
     Processes PCAP files for protocol analysis and HDF files for UE events.
     """
     
-    def __init__(self, python_directory=None):
+    def __init__(self):
         self.config = Config()
-        if python_directory:
-            self.config.PYTHON_DIRECTORY = python_directory
         self.logger = setup_logging()
         self.isolation_forest = None
         self.scaler = StandardScaler()
@@ -787,21 +784,15 @@ class TelecomAnomalyDetector:
 
 def main():
     """Main function to run the telecom anomaly detector."""
-    parser = argparse.ArgumentParser(description='Telecom Anomaly Detection System')
-    parser.add_argument('--python-dir', type=str, default='/usr/bin/python3',
-                       help='Python directory path (default: /usr/bin/python3)')
-    
-    args = parser.parse_args()
-    
     print("Telecom Anomaly Detection System")
     print("=" * 50)
     print("Using Isolation Forest for Unsupervised Learning")
     print("Analyzing PCAP and HDF files for telecom anomalies...")
-    print(f"Python Directory: {args.python_dir}")
+    print(f"Python Directory: /usr/bin/python3")
     print()
     
     try:
-        detector = TelecomAnomalyDetector(python_directory=args.python_dir)
+        detector = TelecomAnomalyDetector()
         detector.process_all_files()
         
     except KeyboardInterrupt:

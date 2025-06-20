@@ -98,6 +98,12 @@ Changelog:
   * Enhanced unidirectional communication detection
   * Added missing plane data detection with sample packets
   * Improved output formatting with specific timestamps and packet details
+- June 20, 2025. Linux deployment configuration:
+  * Hardcoded Linux directory paths for production deployment
+  * Created linux_setup.sh script for automated system setup
+  * Added linux_deployment_guide.md with comprehensive deployment instructions
+  * Removed command-line arguments in favor of hardcoded Linux paths
+  * Configured system directories: /var/log/telecom/, /opt/telecom/, /data/telecom/
 ```
 
 ## User Preferences

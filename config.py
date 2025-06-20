@@ -10,33 +10,35 @@ class Config:
     """Configuration class with hardcoded paths and parameters."""
     
     def __init__(self):
-        # Python script directory (configurable)
-        self.PYTHON_DIRECTORY: str = "/usr/bin/python3"  # Default Python path
+        # Python script directory (hardcoded for Linux)
+        self.PYTHON_DIRECTORY: str = "/usr/bin/python3"
         
-        # Hardcoded directory paths for PCAP files
+        # Hardcoded Linux directory paths for PCAP files
         self.PCAP_DIRS: List[str] = [
-            "/data/pcap",
             "/var/log/telecom/pcap",
-            "/opt/telecom/captures",
-            "./pcap_files",
-            "./data/pcap"
+            "/opt/telecom/pcap",
+            "/data/telecom/pcap", 
+            "/home/telecom/pcap",
+            "/usr/local/telecom/pcap",
+            "/tmp/telecom/pcap"
         ]
         
-        # Hardcoded directory paths for HDF files
+        # Hardcoded Linux directory paths for HDF files
         self.HDF_DIRS: List[str] = [
-            "/data/hdf",
             "/var/log/telecom/hdf",
-            "/opt/telecom/logs",
-            "./hdf_files",
-            "./data/hdf"
+            "/opt/telecom/hdf",
+            "/data/telecom/hdf",
+            "/home/telecom/hdf", 
+            "/usr/local/telecom/hdf",
+            "/tmp/telecom/hdf"
         ]
         
-        # Model storage directory
-        self.MODEL_DIR: str = "./models"
+        # Model storage directory (Linux)
+        self.MODEL_DIR: str = "/var/lib/telecom/models"
         
-        # Logging configuration
+        # Logging configuration (Linux)
         self.LOG_LEVEL: str = "INFO"
-        self.LOG_FILE: str = "./telecom_anomaly_detection.log"
+        self.LOG_FILE: str = "/var/log/telecom/telecom_anomaly_detection.log"
         
         # Isolation Forest parameters
         self.CONTAMINATION_RATE: float = 0.1  # Expected anomaly rate (10%)
@@ -126,10 +128,10 @@ class Config:
         self.PARALLEL_PROCESSING: bool = True
         self.MAX_WORKERS: int = 4
         
-        # Output formatting
+        # Output formatting (Linux)
         self.DISPLAY_DETAILED_STATS: bool = True
         self.SAVE_RESULTS_TO_FILE: bool = True
-        self.RESULTS_OUTPUT_DIR: str = "./results"
+        self.RESULTS_OUTPUT_DIR: str = "/var/log/telecom/results"
         
         # Create necessary directories
         self._create_directories()
@@ -139,7 +141,7 @@ class Config:
         directories = [
             self.MODEL_DIR,
             self.RESULTS_OUTPUT_DIR,
-            "./logs"
+            "/var/log/telecom"
         ]
         
         for directory in directories:
