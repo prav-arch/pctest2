@@ -133,8 +133,9 @@ class TelecomAnomalyDetector:
             # Initialize analysis containers
             protocol_stats = defaultdict(int)
             flow_stats = defaultdict(lambda: {'packets': 0, 'bytes': 0, 'directions': set()})
-            ru_du_communications = defaultdict(lambda: {'du_to_ru': 0, 'ru_to_du': 0})
-            plane_separation = {'c_plane': 0, 'u_plane': 0, 'other': 0}
+            ru_du_communications = defaultdict(lambda: {'du_to_ru': 0, 'ru_to_du': 0, 'du_packets': [], 'ru_packets': []})
+            plane_separation = {'c_plane': 0, 'u_plane': 0, 'other': 0, 'c_plane_packets': [], 'u_plane_packets': []}
+            packet_logs = []  # Store detailed packet information
             
             # Process each packet
             for i, packet in enumerate(packets):
@@ -145,15 +146,43 @@ class TelecomAnomalyDetector:
                 src_ip = ip_layer.src
                 dst_ip = ip_layer.dst
                 
+                # Create detailed packet log
+                packet_log = {
+                    'packet_index': i,
+                    'timestamp': packet.time if hasattr(packet, 'time') else None,
+                    'src_ip': src_ip,
+                    'dst_ip': dst_ip,
+                    'size': len(packet),
+                    'protocol': 'unknown',
+                    'plane': 'other',
+                    'src_port': None,
+                    'dst_port': None,
+                    'summary': packet.summary() if hasattr(packet, 'summary') else str(packet)
+                }
+                
                 # Determine protocol and plane
                 protocol_info = self._identify_protocol(packet)
+                packet_log['protocol'] = protocol_info['protocol']
+                packet_log['plane'] = protocol_info['plane']
+                
+                # Add port information
+                if packet.haslayer(UDP):
+                    packet_log['src_port'] = packet[UDP].sport
+                    packet_log['dst_port'] = packet[UDP].dport
+                elif packet.haslayer(TCP):
+                    packet_log['src_port'] = packet[TCP].sport
+                    packet_log['dst_port'] = packet[TCP].dport
+                
+                packet_logs.append(packet_log)
                 protocol_stats[protocol_info['protocol']] += 1
                 
-                # Track plane separation
+                # Track plane separation with packet details
                 if protocol_info['plane'] == 'control':
                     plane_separation['c_plane'] += 1
+                    plane_separation['c_plane_packets'].append(packet_log)
                 elif protocol_info['plane'] == 'user':
                     plane_separation['u_plane'] += 1
+                    plane_separation['u_plane_packets'].append(packet_log)
                 else:
                     plane_separation['other'] += 1
                 
@@ -163,12 +192,16 @@ class TelecomAnomalyDetector:
                 flow_stats[flow_key]['bytes'] += len(packet)
                 flow_stats[flow_key]['directions'].add(f"{src_ip}->{dst_ip}")
                 
-                # Track RU-DU communications (assume specific IP patterns)
+                # Track RU-DU communications with packet details
                 if self._is_ru_du_communication(src_ip, dst_ip):
                     if self._is_du_ip(src_ip):
-                        ru_du_communications[f"{src_ip}-{dst_ip}"]['du_to_ru'] += 1
+                        comm_key = f"{src_ip}-{dst_ip}"
+                        ru_du_communications[comm_key]['du_to_ru'] += 1
+                        ru_du_communications[comm_key]['du_packets'].append(packet_log)
                     elif self._is_ru_ip(src_ip):
-                        ru_du_communications[f"{dst_ip}-{src_ip}"]['ru_to_du'] += 1
+                        comm_key = f"{dst_ip}-{src_ip}"
+                        ru_du_communications[comm_key]['ru_to_du'] += 1
+                        ru_du_communications[comm_key]['ru_packets'].append(packet_log)
             
             # Extract features for anomaly detection
             features = extract_telecom_features(
@@ -177,7 +210,7 @@ class TelecomAnomalyDetector:
             
             # Detect anomalies in communication patterns
             anomalies = self._detect_communication_anomalies(
-                protocol_stats, flow_stats, ru_du_communications, plane_separation
+                protocol_stats, flow_stats, ru_du_communications, plane_separation, packet_logs
             )
             
             return {
@@ -188,7 +221,8 @@ class TelecomAnomalyDetector:
                 'ru_du_communications': dict(ru_du_communications),
                 'plane_separation': plane_separation,
                 'features': features,
-                'anomalies': anomalies
+                'anomalies': anomalies,
+                'packet_logs': packet_logs
             }
             
         except Exception as e:
@@ -242,18 +276,23 @@ class TelecomAnomalyDetector:
         return ip.startswith('192.168.1.')
     
     def _detect_communication_anomalies(self, protocol_stats, flow_stats, 
-                                       ru_du_communications, plane_separation) -> List[Dict]:
+                                       ru_du_communications, plane_separation, packet_logs) -> List[Dict]:
         """Detect specific telecom communication anomalies."""
         anomalies = []
         
         # Check for unidirectional RU-DU communication
         for comm_pair, stats in ru_du_communications.items():
             if stats['du_to_ru'] > 0 and stats['ru_to_du'] == 0:
+                # Get sample DU packets for logging
+                sample_du_packets = stats['du_packets'][:5]  # Show first 5 packets
                 anomalies.append({
                     'type': 'unidirectional_communication',
                     'description': f"DU sending to RU but no response from RU: {comm_pair}",
                     'severity': 'high',
-                    'details': stats
+                    'details': stats,
+                    'sample_packets': sample_du_packets,
+                    'total_du_packets': len(stats['du_packets']),
+                    'total_ru_packets': len(stats['ru_packets'])
                 })
         
         # Check for missing plane data
@@ -263,19 +302,29 @@ class TelecomAnomalyDetector:
             u_plane_ratio = plane_separation['u_plane'] / total_telecom_packets
             
             if c_plane_ratio < 0.1:  # Less than 10% control plane
+                # Get sample user plane packets that are present
+                sample_u_packets = plane_separation.get('u_plane_packets', [])[:3]
                 anomalies.append({
                     'type': 'missing_control_plane',
                     'description': f"Very low control plane traffic: {c_plane_ratio:.2%}",
                     'severity': 'medium',
-                    'details': plane_separation
+                    'details': plane_separation,
+                    'sample_packets': sample_u_packets,
+                    'missing_plane': 'control',
+                    'present_plane_count': len(plane_separation.get('u_plane_packets', []))
                 })
             
             if u_plane_ratio < 0.1:  # Less than 10% user plane
+                # Get sample control plane packets that are present
+                sample_c_packets = plane_separation.get('c_plane_packets', [])[:3]
                 anomalies.append({
                     'type': 'missing_user_plane',
                     'description': f"Very low user plane traffic: {u_plane_ratio:.2%}",
                     'severity': 'medium',
-                    'details': plane_separation
+                    'details': plane_separation,
+                    'sample_packets': sample_c_packets,
+                    'missing_plane': 'user',
+                    'present_plane_count': len(plane_separation.get('c_plane_packets', []))
                 })
         
         # Check for unusual protocol distributions
@@ -347,11 +396,18 @@ class TelecomAnomalyDetector:
             
             # Expect roughly balanced attach/detach events
             if abs(attach_ratio - detach_ratio) > 0.3:  # More than 30% difference
+                # Get sample events for logging
+                sample_attach_events = attach_events[:3] if attach_events else []
+                sample_detach_events = detach_events[:3] if detach_events else []
                 anomalies.append({
                     'type': 'unbalanced_attach_detach',
                     'description': f"Unbalanced attach/detach ratio: {attach_ratio:.2%} attach, {detach_ratio:.2%} detach",
                     'severity': 'medium',
-                    'details': {'attach_count': len(attach_events), 'detach_count': len(detach_events)}
+                    'details': {'attach_count': len(attach_events), 'detach_count': len(detach_events)},
+                    'sample_attach_events': sample_attach_events,
+                    'sample_detach_events': sample_detach_events,
+                    'total_attach_events': len(attach_events),
+                    'total_detach_events': len(detach_events)
                 })
         
         # Check for rapid attach/detach cycles (same UE)
@@ -367,11 +423,18 @@ class TelecomAnomalyDetector:
         
         for ue_id, counts in ue_event_counts.items():
             if counts['attach'] > 5 or counts['detach'] > 5:  # Threshold for rapid cycling
+                # Get sample events for this UE
+                ue_attach_events = [e for e in attach_events if e.get('ue_id') == ue_id][:3]
+                ue_detach_events = [e for e in detach_events if e.get('ue_id') == ue_id][:3]
                 anomalies.append({
                     'type': 'rapid_attach_detach_cycle',
                     'description': f"UE {ue_id} has rapid attach/detach cycles",
                     'severity': 'high',
-                    'details': {'ue_id': ue_id, 'counts': counts}
+                    'details': {'ue_id': ue_id, 'counts': counts},
+                    'sample_ue_attach_events': ue_attach_events,
+                    'sample_ue_detach_events': ue_detach_events,
+                    'total_ue_attach_events': len([e for e in attach_events if e.get('ue_id') == ue_id]),
+                    'total_ue_detach_events': len([e for e in detach_events if e.get('ue_id') == ue_id])
                 })
         
         return anomalies
@@ -556,6 +619,9 @@ class TelecomAnomalyDetector:
                 severity_emoji = {'high': '🔴', 'medium': '🟡', 'low': '🟢'}.get(anomaly.get('severity', 'low'), '🔵')
                 print(f"  {i}. {severity_emoji} [{anomaly.get('severity', 'unknown').upper()}] {anomaly.get('type', 'unknown')}")
                 print(f"     Description: {anomaly.get('description', 'No description')}")
+                
+                # Display specific packet/event logs for this anomaly
+                self._display_anomaly_logs(anomaly, result.get('file', 'Unknown'))
         
         # Display summary statistics
         if 'packet_count' in result:  # PCAP file
@@ -583,6 +649,103 @@ class TelecomAnomalyDetector:
                 detach_ratio = result['detach_events'] / result['total_events']
                 print(f"  Attach Ratio: {attach_ratio*100:.1f}%")
                 print(f"  Detach Ratio: {detach_ratio*100:.1f}%")
+    
+    def _display_anomaly_logs(self, anomaly: Dict, filename: str) -> None:
+        """Display specific log details for an anomaly."""
+        anomaly_type = anomaly.get('type', 'unknown')
+        
+        print(f"\n     📋 ANOMALY LOG DETAILS:")
+        
+        if anomaly_type == 'unidirectional_communication':
+            # Display specific DU packets that have no RU response
+            sample_packets = anomaly.get('sample_packets', [])
+            total_du_packets = anomaly.get('total_du_packets', 0)
+            total_ru_packets = anomaly.get('total_ru_packets', 0)
+            
+            print(f"     → Total DU→RU packets: {total_du_packets}, RU→DU responses: {total_ru_packets}")
+            print(f"     → Sample DU packets with no RU response:")
+            
+            for j, packet in enumerate(sample_packets[:3], 1):
+                timestamp = packet.get('timestamp', 'N/A')
+                if timestamp != 'N/A' and timestamp:
+                    from datetime import datetime
+                    timestamp = datetime.fromtimestamp(float(timestamp)).strftime('%H:%M:%S.%f')[:-3]
+                
+                print(f"        {j}. Packet #{packet.get('packet_index', 'N/A')} at {timestamp}")
+                print(f"           {packet.get('src_ip', 'N/A')}:{packet.get('src_port', 'N/A')} → {packet.get('dst_ip', 'N/A')}:{packet.get('dst_port', 'N/A')}")
+                print(f"           Protocol: {packet.get('protocol', 'unknown')}, Size: {packet.get('size', 0)} bytes")
+                print(f"           Summary: {packet.get('summary', 'N/A')[:80]}...")
+        
+        elif anomaly_type in ['missing_user_plane', 'missing_control_plane']:
+            # Display sample packets from the present plane
+            sample_packets = anomaly.get('sample_packets', [])
+            missing_plane = anomaly.get('missing_plane', 'unknown')
+            present_count = anomaly.get('present_plane_count', 0)
+            
+            print(f"     → Missing: {missing_plane} plane data")
+            print(f"     → Present plane has {present_count} packets")
+            print(f"     → Sample packets from present plane:")
+            
+            for j, packet in enumerate(sample_packets[:3], 1):
+                timestamp = packet.get('timestamp', 'N/A')
+                if timestamp != 'N/A' and timestamp:
+                    from datetime import datetime
+                    timestamp = datetime.fromtimestamp(float(timestamp)).strftime('%H:%M:%S.%f')[:-3]
+                
+                print(f"        {j}. Packet #{packet.get('packet_index', 'N/A')} at {timestamp}")
+                print(f"           {packet.get('src_ip', 'N/A')}:{packet.get('src_port', 'N/A')} → {packet.get('dst_ip', 'N/A')}:{packet.get('dst_port', 'N/A')}")
+                print(f"           Protocol: {packet.get('protocol', 'unknown')}, Plane: {packet.get('plane', 'unknown')}")
+        
+        elif anomaly_type == 'unbalanced_attach_detach':
+            # Display sample UE events
+            sample_attach = anomaly.get('sample_attach_events', [])
+            sample_detach = anomaly.get('sample_detach_events', [])
+            total_attach = anomaly.get('total_attach_events', 0)
+            total_detach = anomaly.get('total_detach_events', 0)
+            
+            print(f"     → Total attach events: {total_attach}, detach events: {total_detach}")
+            
+            if sample_attach:
+                print(f"     → Sample attach events:")
+                for j, event in enumerate(sample_attach[:3], 1):
+                    ue_id = event.get('ue_id', 'unknown')
+                    timestamp = event.get('timestamp', 'N/A')
+                    cell_id = event.get('cell_id', 'unknown')
+                    print(f"        {j}. UE {ue_id} attached to {cell_id} at {timestamp}")
+            
+            if sample_detach:
+                print(f"     → Sample detach events:")
+                for j, event in enumerate(sample_detach[:3], 1):
+                    ue_id = event.get('ue_id', 'unknown')
+                    timestamp = event.get('timestamp', 'N/A')
+                    cell_id = event.get('cell_id', 'unknown')
+                    print(f"        {j}. UE {ue_id} detached from {cell_id} at {timestamp}")
+        
+        elif anomaly_type == 'rapid_attach_detach_cycle':
+            # Display rapid cycling UE events
+            ue_id = anomaly.get('details', {}).get('ue_id', 'unknown')
+            sample_attach = anomaly.get('sample_ue_attach_events', [])
+            sample_detach = anomaly.get('sample_ue_detach_events', [])
+            total_ue_attach = anomaly.get('total_ue_attach_events', 0)
+            total_ue_detach = anomaly.get('total_ue_detach_events', 0)
+            
+            print(f"     → UE {ue_id} rapid cycling: {total_ue_attach} attaches, {total_ue_detach} detaches")
+            print(f"     → Sample rapid attach events:")
+            
+            for j, event in enumerate(sample_attach[:3], 1):
+                timestamp = event.get('timestamp', 'N/A')
+                cell_id = event.get('cell_id', 'unknown')
+                print(f"        {j}. UE {ue_id} attached to {cell_id} at {timestamp}")
+            
+            if sample_detach:
+                print(f"     → Sample rapid detach events:")
+                for j, event in enumerate(sample_detach[:3], 1):
+                    timestamp = event.get('timestamp', 'N/A')
+                    cell_id = event.get('cell_id', 'unknown')
+                    print(f"        {j}. UE {ue_id} detached from {cell_id} at {timestamp}")
+        
+        print(f"     📁 Log file: {filename}")
+        print()
 
 
 def main():

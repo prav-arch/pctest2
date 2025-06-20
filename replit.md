@@ -92,6 +92,12 @@ The application follows a modular architecture with clear separation of concerns
 ```
 Changelog:
 - June 20, 2025. Initial setup
+- June 20, 2025. Enhanced anomaly detection with specific log details:
+  * Added detailed packet logs for PCAP anomalies
+  * Added UE event logs for HDF anomalies  
+  * Enhanced unidirectional communication detection
+  * Added missing plane data detection with sample packets
+  * Improved output formatting with specific timestamps and packet details
 ```
 
 ## User Preferences
