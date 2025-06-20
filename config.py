@@ -60,9 +60,9 @@ class Config:
         
         # RU-DU communication patterns based on MAC addresses
         self.RU_MAC_PATTERNS: List[str] = [
-            "00:11:22:",   # RU vendor prefix 1
-            "AA:BB:CC:",   # RU vendor prefix 2
-            "44:55:66:",   # RU vendor prefix 3
+            "AA:BB:CC:",   # RU vendor prefix 1
+            "44:55:66:",   # RU vendor prefix 2
+            "88:99:AA:",   # RU vendor prefix 3
         ]
         
         self.DU_MAC_PATTERNS: List[str] = [

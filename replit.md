@@ -112,6 +112,14 @@ Changelog:
   * Logging redirected to file-only for production use
   * Maintains detailed anomaly reporting with packet logs and event details
   * Optimized for Linux deployment with clear status indication
+- June 20, 2025. MAC address-based RU/DU identification:
+  * Replaced IP-based patterns with MAC address patterns for device identification
+  * Updated DU MAC patterns to include specific addresses: 00:11:22:33:44:67, 00:11:22:33:44:66
+  * Enhanced detection accuracy using Layer 2 addressing instead of Layer 3
+  * Maintains telecom standards in main config, Linux-specific paths in linux_config
+  * Created MAC-based sample data for testing with user's specific DU addresses
+  * Successfully tested unidirectional communication detection with MAC-based patterns
+  * Communication keys now display MAC addresses instead of IP patterns for clearer identification
 ```
 
 ## User Preferences
