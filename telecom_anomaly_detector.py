@@ -46,13 +46,14 @@ class TelecomAnomalyDetector:
     Processes PCAP files for protocol analysis and HDF files for UE events.
     """
     
-    def __init__(self):
+    def __init__(self, input_folder=None):
         self.config = Config()
         self.logger = setup_logging()
         self.isolation_forest = None
         self.scaler = StandardScaler()
         self.model_trained = False
         self.feature_columns = []
+        self.input_folder = input_folder  # Custom folder path for files
         
         # Initialize production protocol mapper for flexible protocol detection
         from production_protocol_mapper import ProductionProtocolMapper
@@ -674,19 +675,32 @@ class TelecomAnomalyDetector:
         pcap_files = []
         hdf_files = []
         
-        for pcap_dir in self.config.PCAP_DIRS:
-            if os.path.exists(pcap_dir):
-                pcap_files.extend(glob.glob(os.path.join(pcap_dir, "*.pcap")))
-                pcap_files.extend(glob.glob(os.path.join(pcap_dir, "*.cap")))
+        if self.input_folder:
+            # Use custom input folder if specified
+            if os.path.exists(self.input_folder):
+                pcap_files.extend(glob.glob(os.path.join(self.input_folder, "*.pcap")))
+                pcap_files.extend(glob.glob(os.path.join(self.input_folder, "*.cap")))
+                hdf_files.extend(glob.glob(os.path.join(self.input_folder, "*.h5")))
+                hdf_files.extend(glob.glob(os.path.join(self.input_folder, "*.hdf5")))
+                self.logger.info(f"Using custom input folder: {self.input_folder}")
             else:
-                self.logger.warning(f"PCAP directory not found: {pcap_dir}")
-        
-        for hdf_dir in self.config.HDF_DIRS:
-            if os.path.exists(hdf_dir):
-                hdf_files.extend(glob.glob(os.path.join(hdf_dir, "*.h5")))
-                hdf_files.extend(glob.glob(os.path.join(hdf_dir, "*.hdf5")))
-            else:
-                self.logger.warning(f"HDF directory not found: {hdf_dir}")
+                self.logger.error(f"Custom input folder not found: {self.input_folder}")
+                return
+        else:
+            # Use default configured directories
+            for pcap_dir in self.config.PCAP_DIRS:
+                if os.path.exists(pcap_dir):
+                    pcap_files.extend(glob.glob(os.path.join(pcap_dir, "*.pcap")))
+                    pcap_files.extend(glob.glob(os.path.join(pcap_dir, "*.cap")))
+                else:
+                    self.logger.warning(f"PCAP directory not found: {pcap_dir}")
+            
+            for hdf_dir in self.config.HDF_DIRS:
+                if os.path.exists(hdf_dir):
+                    hdf_files.extend(glob.glob(os.path.join(hdf_dir, "*.h5")))
+                    hdf_files.extend(glob.glob(os.path.join(hdf_dir, "*.hdf5")))
+                else:
+                    self.logger.warning(f"HDF directory not found: {hdf_dir}")
         
         self.logger.info(f"Found {len(pcap_files)} PCAP files and {len(hdf_files)} HDF files")
         
@@ -1014,8 +1028,25 @@ class TelecomAnomalyDetector:
 
 def main():
     """Main function to run the telecom anomaly detector."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Telecom Anomaly Detection System')
+    parser.add_argument('--folder', '-f', type=str, help='Input folder path containing PCAP and HDF files')
+    parser.add_argument('--input-dir', '-i', type=str, help='Input directory path (alternative to --folder)')
+    
+    args = parser.parse_args()
+    
+    # Use folder parameter (either --folder or --input-dir)
+    input_folder = args.folder or args.input_dir
+    
     try:
-        detector = TelecomAnomalyDetector()
+        if input_folder:
+            print(f"Processing files from folder: {input_folder}")
+            detector = TelecomAnomalyDetector(input_folder=input_folder)
+        else:
+            print("Using default configured directories")
+            detector = TelecomAnomalyDetector()
+            
         detector.process_all_files()
         
     except KeyboardInterrupt:
