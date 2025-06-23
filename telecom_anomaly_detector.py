@@ -894,7 +894,7 @@ class TelecomAnomalyDetector:
                 if 'response_time' in anomaly:
                     print(f"     Response Time: {anomaly['response_time']}")
                 if 'escalation_required' in anomaly and anomaly['escalation_required']:
-                    print(f"     ⚠️  ESCALATION REQUIRED")
+                    print(f"     ESCALATION REQUIRED")
                 if 'recommended_action' in anomaly:
                     print(f"     Action: {anomaly['recommended_action']}")
                 

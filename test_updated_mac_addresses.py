@@ -33,7 +33,7 @@ def test_updated_mac_addresses():
     print(f"RU MAC {actual_ru_mac}:")
     print(f"  Config detection: {ru_config_result}")
     print(f"  Mapper detection: {ru_mapper_result}")
-    print(f"  Status: {'✓ PASS' if ru_config_result and ru_mapper_result == 'RU' else '✗ FAIL'}")
+    print(f"  Status: {'PASS' if ru_config_result and ru_mapper_result == 'RU' else 'FAIL'}")
     print()
     
     # Test DU MAC identification
@@ -42,7 +42,7 @@ def test_updated_mac_addresses():
     print(f"DU MAC {actual_du_mac}:")
     print(f"  Config detection: {du_config_result}")
     print(f"  Mapper detection: {du_mapper_result}")
-    print(f"  Status: {'✓ PASS' if du_config_result and du_mapper_result == 'DU' else '✗ FAIL'}")
+    print(f"  Status: {'PASS' if du_config_result and du_mapper_result == 'DU' else 'FAIL'}")
     print()
     
     print("2. TESTING MAC PATTERN MATCHING:")
@@ -63,11 +63,11 @@ def test_updated_mac_addresses():
         mapper_result = mapper.identify_device_type(mac)
         
         if expected == "RU":
-            status = "✓ PASS" if config_ru and mapper_result == "RU" else "✗ FAIL"
+            status = "PASS" if config_ru and mapper_result == "RU" else "FAIL"
         elif expected == "DU":
-            status = "✓ PASS" if config_du and mapper_result == "DU" else "✗ FAIL"
+            status = "PASS" if config_du and mapper_result == "DU" else "FAIL"
         else:
-            status = "✓ PASS" if not config_ru and not config_du and mapper_result == "unknown" else "✗ FAIL"
+            status = "PASS" if not config_ru and not config_du and mapper_result == "unknown" else "FAIL"
         
         print(f"{description:12} {mac:17} → Config: RU={config_ru}, DU={config_du} | Mapper: {mapper_result:7} | {status}")
     
@@ -88,7 +88,7 @@ def test_updated_mac_addresses():
     
     for description, src_mac, dst_mac in communication_tests:
         is_ru_du_comm = detector._is_ru_du_communication(src_mac, dst_mac)
-        status = "✓ DETECTED" if is_ru_du_comm else "○ Not RU-DU"
+        status = "DETECTED" if is_ru_du_comm else "Not RU-DU"
         print(f"{description:12} {src_mac} → {dst_mac} | {status}")
     
     print()
@@ -98,7 +98,7 @@ def test_updated_mac_addresses():
     # Create sample data with correct MAC addresses
     create_updated_sample_data()
     
-    print("✓ Sample data created with correct MAC addresses")
+    print("Sample data created with correct MAC addresses")
     print(f"  RU MAC: {actual_ru_mac}")
     print(f"  DU MAC: {actual_du_mac}")
 
@@ -158,12 +158,12 @@ def main():
     print()
     print("SUMMARY:")
     print("=" * 40)
-    print("✓ System updated with correct MAC addresses")
-    print("✓ RU MAC: 6c:ad:ad:00:03:2a")
-    print("✓ DU MAC: 00:11:22:33:44:67")
-    print("✓ Pattern matching works for device families")
-    print("✓ Production protocol mapper supports both addresses")
-    print("✓ Sample data created for testing")
+    print("System updated with correct MAC addresses")
+    print("RU MAC: 6c:ad:ad:00:03:2a")
+    print("DU MAC: 00:11:22:33:44:67")
+    print("Pattern matching works for device families")
+    print("Production protocol mapper supports both addresses")
+    print("Sample data created for testing")
 
 if __name__ == "__main__":
     main()
