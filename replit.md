@@ -155,6 +155,14 @@ Changelog:
   * Updated configuration to use unified DATA_DIRS pointing to single folder locations
   * Successfully tested with mixed data folder containing 13 PCAP and 3 HDF files
   * System automatically detects and processes all supported file types from one location
+- June 23, 2025. CU (Central Unit) log analysis integration:
+  * Added comprehensive CU log analyzer for .txt and .log file anomaly detection
+  * Implemented 18 specialized features for CU log analysis including error patterns, timing anomalies
+  * Integrated 6 error categories: connection failures, handover failures, resource exhaustion, protocol errors, authentication failures, synchronization loss
+  * Added log level analysis (CRITICAL, ERROR, WARNING, INFO, DEBUG) with frequency tracking
+  * Implemented timestamp gap detection for missing log periods identification
+  * Successfully tested with sample CU log containing 38 lines, detected 11 errors across 6 categories
+  * Severity classification automatically applied to CU log anomalies with priority scoring
 ```
 
 ## User Preferences

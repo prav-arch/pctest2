@@ -12,7 +12,7 @@ import pickle
 import numpy as np
 import pandas as pd
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from collections import defaultdict
 
 # Third-party imports
@@ -668,6 +668,58 @@ class TelecomAnomalyDetector:
             self.logger.error(f"Error predicting anomaly: {e}")
             return 0, 0.0
     
+    def analyze_cu_log_file(self, file_path: str) -> Dict[str, Any]:
+        """
+        Analyze CU log file for anomalies.
+        
+        Args:
+            file_path: Path to the CU log file
+            
+        Returns:
+            Analysis results dictionary
+        """
+        self.logger.info(f"Analyzing CU log file: {file_path}")
+        
+        try:
+            # Use CU log analyzer for detailed analysis
+            result = self.cu_log_analyzer.analyze_cu_log_file(file_path)
+            
+            # Apply severity classification to detected anomalies
+            if 'anomalies' in result and result['anomalies']:
+                for anomaly in result['anomalies']:
+                    # Create context for severity classification
+                    context = {
+                        'file_type': 'CU_LOG',
+                        'total_lines': result.get('total_lines', 0),
+                        'error_count': anomaly.get('total_errors', 0),
+                        'duration': 'unknown'
+                    }
+                    
+                    # Classify severity
+                    classification = self.severity_classifier.classify_anomaly(
+                        anomaly['type'], context
+                    )
+                    
+                    # Add classification to anomaly
+                    anomaly['severity_level'] = classification.severity.value
+                    anomaly['priority_score'] = classification.priority_score
+                    anomaly['impact_description'] = classification.impact_description
+                    anomaly['response_time'] = classification.response_time
+                    anomaly['escalation_required'] = classification.escalation_required
+                    anomaly['recommended_action'] = classification.recommended_action
+            
+            self.logger.info(f"CU log analysis completed for {file_path}")
+            return result
+            
+        except Exception as e:
+            error_msg = f"Error analyzing CU log file {file_path}: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                'file': file_path,
+                'type': 'CU_LOG',
+                'error': error_msg
+            }
+    
     def process_all_files(self) -> None:
         """Process all PCAP and HDF files from configured directories."""
         self.logger.info("Starting telecom anomaly detection...")
@@ -938,6 +990,39 @@ class TelecomAnomalyDetector:
                 detach_ratio = result['detach_events'] / result['total_events']
                 print(f"  Attach Ratio: {attach_ratio*100:.1f}%")
                 print(f"  Detach Ratio: {detach_ratio*100:.1f}%")
+        
+        elif 'total_lines' in result:  # CU Log file
+            print(f"\nCU Log Statistics:")
+            print(f"  Total Lines: {result['total_lines']}")
+            
+            # Display error analysis
+            if 'error_analysis' in result:
+                error_analysis = result['error_analysis']
+                total_errors = sum(error_analysis.values())
+                print(f"  Total Errors: {total_errors}")
+                if total_errors > 0:
+                    print(f"  Error Types:")
+                    for error_type, count in error_analysis.items():
+                        if count > 0:
+                            print(f"    {error_type.replace('_', ' ').title()}: {count}")
+            
+            # Display log level distribution
+            if 'log_level_analysis' in result:
+                log_levels = result['log_level_analysis']
+                print(f"  Log Levels:")
+                for level, count in log_levels.items():
+                    if count > 0:
+                        print(f"    {level}: {count}")
+            
+            # Display timestamp analysis
+            if 'timestamp_analysis' in result:
+                ts_analysis = result['timestamp_analysis']
+                if ts_analysis.get('total_timestamps', 0) > 0:
+                    print(f"  Timestamp Analysis:")
+                    print(f"    Total Timestamps: {ts_analysis['total_timestamps']}")
+                    if ts_analysis.get('max_gap', 0) > 0:
+                        print(f"    Max Gap: {ts_analysis['max_gap']:.1f} seconds")
+                        print(f"    Average Gap: {ts_analysis['average_gap']:.1f} seconds")
     
     def _display_anomaly_logs(self, anomaly: Dict, filename: str) -> None:
         """Display specific log details for an anomaly."""

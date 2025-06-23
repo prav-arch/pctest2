@@ -1,0 +1,38 @@
+2024-06-23 10:15:23 [INFO] CU initialization started
+2024-06-23 10:15:24 [INFO] Loading configuration from /etc/cu/config.xml
+2024-06-23 10:15:25 [INFO] Starting protocol handlers
+2024-06-23 10:15:26 [INFO] F1-C interface initialized on port 38472
+2024-06-23 10:15:27 [INFO] F1-U interface initialized on port 2152
+2024-06-23 10:15:28 [INFO] CU ready for connections
+2024-06-23 10:15:30 [INFO] DU connection established from 192.168.1.100
+2024-06-23 10:15:32 [WARNING] High CPU usage detected: 85%
+2024-06-23 10:15:35 [INFO] UE attach request received for IMSI 123456789012345
+2024-06-23 10:15:36 [INFO] Authentication successful for UE 123456789012345
+2024-06-23 10:15:40 [ERROR] Connection timeout with DU 192.168.1.100
+2024-06-23 10:15:41 [ERROR] Failed to establish F1-C connection to DU
+2024-06-23 10:15:42 [WARNING] Retrying DU connection (attempt 1/3)
+2024-06-23 10:15:45 [ERROR] Connection refused by DU 192.168.1.100
+2024-06-23 10:15:46 [CRITICAL] DU connection failure - service impact imminent
+2024-06-23 10:15:47 [ERROR] Handover failed for UE 123456789012345
+2024-06-23 10:15:48 [ERROR] Protocol error: Invalid message format received
+2024-06-23 10:15:50 [WARNING] Memory usage high: 92%
+2024-06-23 10:15:52 [ERROR] Buffer overflow detected in F1-U handler
+2024-06-23 10:15:55 [ERROR] Authentication failed for UE 987654321098765
+2024-06-23 10:15:56 [ERROR] Certificate validation error
+2024-06-23 10:15:58 [WARNING] Clock drift detected: 150ms
+2024-06-23 10:16:00 [ERROR] Synchronization lost with GPS reference
+2024-06-23 10:16:02 [CRITICAL] Resource exhaustion - dropping new connections
+2024-06-23 10:16:05 [ERROR] Decode failed for RRC message
+2024-06-23 10:16:07 [ERROR] Malformed packet received from DU
+2024-06-23 10:16:10 [WARNING] High error rate detected on F1 interface
+2024-06-23 10:16:15 [INFO] Attempting to restart F1-C handler
+2024-06-23 10:16:16 [ERROR] Handler restart failed - manual intervention required
+2024-06-23 10:16:20 [CRITICAL] Service degradation - multiple UE disconnections
+2024-06-23 10:16:25 [ERROR] Connection failure cascade detected
+2024-06-23 10:16:30 [WARNING] Entering emergency mode
+2024-06-23 10:16:35 [INFO] Emergency recovery initiated
+2024-06-23 10:16:40 [INFO] Partial service restored
+2024-06-23 10:16:45 [WARNING] Operating in degraded mode
+2024-06-23 10:16:50 [INFO] Full service recovery completed
+2024-06-23 10:16:55 [INFO] System status: Normal operation
+2024-06-23 10:17:00 [INFO] Performance monitoring resumed
