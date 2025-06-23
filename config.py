@@ -13,30 +13,29 @@ class Config:
         # Python script directory (hardcoded for Linux)
         self.PYTHON_DIRECTORY: str = "/usr/bin/python3"
         
-        # Hardcoded Linux directory paths for PCAP files (with local fallback)
-        self.PCAP_DIRS: List[str] = [
-            "/var/log/telecom/pcap",
-            "/opt/telecom/pcap",
-            "/data/telecom/pcap", 
-            "/home/telecom/pcap",
-            "/usr/local/telecom/pcap",
-            "/tmp/telecom/pcap",
-            "./pcap_files"  # Local fallback for development
+        # Single data directory containing both PCAP and HDF files
+        self.DATA_DIRS: List[str] = [
+            "/var/log/telecom/data",
+            "/opt/telecom/data",
+            "/data/telecom",
+            "/home/telecom/data",
+            "/usr/local/telecom/data", 
+            "/tmp/telecom/data",
+            "./data_files"  # Local fallback for development
         ]
         
-        # Hardcoded Linux directory paths for HDF files (with local fallback)
-        self.HDF_DIRS: List[str] = [
-            "/var/log/telecom/hdf",
-            "/opt/telecom/hdf",
-            "/data/telecom/hdf",
-            "/home/telecom/hdf", 
-            "/usr/local/telecom/hdf",
-            "/tmp/telecom/hdf",
-            "./hdf_files"  # Local fallback for development
-        ]
+        # Legacy support - point to same directories
+        self.PCAP_DIRS: List[str] = self.DATA_DIRS.copy()
+        self.HDF_DIRS: List[str] = self.DATA_DIRS.copy()
         
         # Model storage directory (Linux with local fallback)
         self.MODEL_DIR: str = "./models"
+    
+    def set_data_directory(self, data_path: str) -> None:
+        """Set a single data directory for both PCAP and HDF files."""
+        self.DATA_DIRS = [data_path]
+        self.PCAP_DIRS = [data_path]
+        self.HDF_DIRS = [data_path]
         
         # Logging configuration (Linux with local fallback)
         self.LOG_LEVEL: str = "INFO"

@@ -63,6 +63,10 @@ class TelecomAnomalyDetector:
         from adaptive_contamination_system import AdaptiveContaminationManager
         self.contamination_manager = AdaptiveContaminationManager(initial_contamination=0.1)
         
+        # Initialize CU log analyzer
+        from cu_log_analyzer import CULogAnalyzer
+        self.cu_log_analyzer = CULogAnalyzer()
+        
         # Legacy telecom protocol ports (kept for backward compatibility)
         self.telecom_ports = {
             'CPRI': [8080, 8081, 8082],
@@ -674,6 +678,7 @@ class TelecomAnomalyDetector:
         # Find all files to process
         pcap_files = []
         hdf_files = []
+        txt_files = []
         
         if self.input_folder:
             # Use custom input folder if specified
@@ -682,27 +687,26 @@ class TelecomAnomalyDetector:
                 pcap_files.extend(glob.glob(os.path.join(self.input_folder, "*.cap")))
                 hdf_files.extend(glob.glob(os.path.join(self.input_folder, "*.h5")))
                 hdf_files.extend(glob.glob(os.path.join(self.input_folder, "*.hdf5")))
+                txt_files.extend(glob.glob(os.path.join(self.input_folder, "*.txt")))
+                txt_files.extend(glob.glob(os.path.join(self.input_folder, "*.log")))
                 self.logger.info(f"Using custom input folder: {self.input_folder}")
             else:
                 self.logger.error(f"Custom input folder not found: {self.input_folder}")
                 return
         else:
             # Use default configured directories
-            for pcap_dir in self.config.PCAP_DIRS:
-                if os.path.exists(pcap_dir):
-                    pcap_files.extend(glob.glob(os.path.join(pcap_dir, "*.pcap")))
-                    pcap_files.extend(glob.glob(os.path.join(pcap_dir, "*.cap")))
+            for data_dir in self.config.DATA_DIRS:
+                if os.path.exists(data_dir):
+                    pcap_files.extend(glob.glob(os.path.join(data_dir, "*.pcap")))
+                    pcap_files.extend(glob.glob(os.path.join(data_dir, "*.cap")))
+                    hdf_files.extend(glob.glob(os.path.join(data_dir, "*.h5")))
+                    hdf_files.extend(glob.glob(os.path.join(data_dir, "*.hdf5")))
+                    txt_files.extend(glob.glob(os.path.join(data_dir, "*.txt")))
+                    txt_files.extend(glob.glob(os.path.join(data_dir, "*.log")))
                 else:
-                    self.logger.warning(f"PCAP directory not found: {pcap_dir}")
-            
-            for hdf_dir in self.config.HDF_DIRS:
-                if os.path.exists(hdf_dir):
-                    hdf_files.extend(glob.glob(os.path.join(hdf_dir, "*.h5")))
-                    hdf_files.extend(glob.glob(os.path.join(hdf_dir, "*.hdf5")))
-                else:
-                    self.logger.warning(f"HDF directory not found: {hdf_dir}")
+                    self.logger.warning(f"Data directory not found: {data_dir}")
         
-        self.logger.info(f"Found {len(pcap_files)} PCAP files and {len(hdf_files)} HDF files")
+        self.logger.info(f"Found {len(pcap_files)} PCAP files, {len(hdf_files)} HDF files, and {len(txt_files)} CU log files")
         
         # Process files and collect features
         all_features = []
@@ -718,6 +722,13 @@ class TelecomAnomalyDetector:
         # Process HDF files
         for hdf_file in hdf_files:
             result = self.analyze_hdf_file(hdf_file)
+            if 'error' not in result:
+                all_features.append(result['features'])
+                all_results.append(result)
+        
+        # Process CU log files
+        for txt_file in txt_files:
+            result = self.analyze_cu_log_file(txt_file)
             if 'error' not in result:
                 all_features.append(result['features'])
                 all_results.append(result)

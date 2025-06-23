@@ -148,6 +148,13 @@ Changelog:
   * Integrated historical pattern analysis and stability controls to prevent oscillation
   * Successfully tested adaptation from normal 8% to crisis 35% anomaly rates with optimal sensitivity
   * Eliminates fixed 10% limitation ensuring no missed threats during high anomaly periods
+- June 23, 2025. Single folder configuration and emoji-free output:
+  * Configured system for single data directory containing both PCAP and HDF files
+  * Added folder input support via command line arguments and programmatic methods
+  * Removed all emoji symbols from output for professional display format
+  * Updated configuration to use unified DATA_DIRS pointing to single folder locations
+  * Successfully tested with mixed data folder containing 13 PCAP and 3 HDF files
+  * System automatically detects and processes all supported file types from one location
 ```
 
 ## User Preferences
