@@ -164,7 +164,7 @@ class ClickHouseAnomalyStorage:
                 'raw_data': anomaly_data.get('raw_data', {})
             }
             
-            # Prepare record
+            # Prepare record with None metadata to avoid timeout issues
             record = {
                 'id': anomaly_id,
                 'anomaly_type': anomaly_type,
@@ -175,7 +175,7 @@ class ClickHouseAnomalyStorage:
                 'log_line': anomaly_data.get('log_details', '')[:1000],  # Limit log line length
                 'detected_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'resolved_at': None,
-                'metadata': json.dumps(metadata),
+                'metadata': None,  # Set to None to avoid JSON parsing timeouts
                 'resolution_steps': anomaly_data.get('recommended_action', ''),
                 'category': category,
                 'impact_level': self._map_severity_to_impact(severity),
@@ -201,7 +201,7 @@ class ClickHouseAnomalyStorage:
             print(f"\n[DEBUG] Parameters:")
             for key, value in record.items():
                 if key == 'metadata':
-                    print(f"  {key}: {str(value)[:100]}..." if len(str(value)) > 100 else f"  {key}: {value}")
+                    print(f"  {key}: {value} (None - avoiding JSON timeout)")
                 else:
                     print(f"  {key}: {value}")
             print(f"\n[DEBUG] Executing INSERT...")
