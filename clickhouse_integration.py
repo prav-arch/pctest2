@@ -86,6 +86,13 @@ class ClickHouseAnomalyStorage:
             if not self.client:
                 return False
             
+            # Check if table exists using simple SHOW TABLES
+            tables = self.client.execute("SHOW TABLES")
+            table_names = [table[0] for table in tables]
+            print(f"  [DATABASE] Available tables: {table_names}")
+            
+            table_exists = 'anomalies' in table_names
+            
             if not table_exists:
                 print("  [DATABASE] Table 'anomalies' not found, creating...")
                 # Create table
