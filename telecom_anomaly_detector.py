@@ -76,6 +76,24 @@ class TelecomAnomalyDetector:
         from cu_log_analyzer import CULogAnalyzer
         self.cu_log_analyzer = CULogAnalyzer()
         
+        # Initialize ClickHouse integration
+        self.clickhouse_storage = None
+        try:
+            from clickhouse_integration import ClickHouseAnomalyStorage
+            self.clickhouse_storage = ClickHouseAnomalyStorage()
+            if self.clickhouse_storage.test_connection():
+                if self.clickhouse_storage.ensure_table_exists():
+                    print("✓ ClickHouse integration enabled")
+                else:
+                    print("⚠ ClickHouse table not found, database storage disabled")
+                    self.clickhouse_storage = None
+            else:
+                print("⚠ ClickHouse connection failed, database storage disabled")
+                self.clickhouse_storage = None
+        except Exception as e:
+            print(f"⚠ ClickHouse integration disabled: {str(e)}")
+            self.clickhouse_storage = None
+        
         # Legacy telecom protocol ports (kept for backward compatibility)
         self.telecom_ports = {
             'CPRI': [8080, 8081, 8082],
@@ -1061,6 +1079,11 @@ class TelecomAnomalyDetector:
             
             # Display comprehensive anomaly summary
             self._display_comprehensive_anomaly_summary(detected_anomalies)
+            
+            # Store anomalies in ClickHouse database
+            if self.clickhouse_storage and detected_anomalies:
+                self._store_anomalies_in_clickhouse(detected_anomalies)
+            
             print("="*80)
         else:
             # Only print if files were actually processed
@@ -1122,6 +1145,10 @@ class TelecomAnomalyDetector:
                     anomaly_counter += 1
         
         print(f"\nTotal anomalies found: {anomaly_counter - 1}")
+        
+        # Store anomalies in ClickHouse database
+        if self.clickhouse_storage and detected_anomalies:
+            self._store_anomalies_in_clickhouse(detected_anomalies)
 
     def _display_file_results(self, result: Dict, prediction: int, anomaly_score: float) -> None:
         """Display analysis results for a single file."""
