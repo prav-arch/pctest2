@@ -152,7 +152,6 @@ def extract_telecom_features(protocol_stats: Dict, flow_stats: Dict,
 def process_hdf_file(hdf_path: str) -> Dict[str, Any]:
     """
     Process HDF file and extract UE events and other telecom data.
-    Handles various HDF file formats and structures robustly.
     
     Args:
         hdf_path: Path to HDF file
@@ -160,23 +159,6 @@ def process_hdf_file(hdf_path: str) -> Dict[str, Any]:
     Returns:
         Dictionary containing extracted data and metadata
     """
-    
-    # Validate file exists and is readable
-    if not os.path.exists(hdf_path):
-        return {'error': f"HDF file not found: {hdf_path}", 'file_path': hdf_path}
-    
-    if os.path.getsize(hdf_path) == 0:
-        return {'error': f"HDF file is empty: {hdf_path}", 'file_path': hdf_path}
-    
-    try:
-        # Test if file can be opened as HDF5
-        with h5py.File(hdf_path, 'r') as test_file:
-            pass  # Just test opening
-    except (OSError, IOError, ValueError) as e:
-        return {'error': f"Invalid HDF5 file format: {str(e)}", 'file_path': hdf_path}
-    except Exception as e:
-        return {'error': f"Cannot open HDF file: {str(e)}", 'file_path': hdf_path}
-    
     try:
         with h5py.File(hdf_path, 'r') as hdf_file:
             result = {
@@ -184,112 +166,67 @@ def process_hdf_file(hdf_path: str) -> Dict[str, Any]:
                 'file_size': os.path.getsize(hdf_path),
                 'datasets': list(hdf_file.keys()),
                 'ue_events': [],
-                'metadata': {},
-                'processing_log': []
+                'metadata': {}
             }
             
-            # Extract metadata safely
-            try:
-                for attr_name in hdf_file.attrs:
-                    try:
-                        attr_value = hdf_file.attrs[attr_name]
-                        # Convert numpy types to Python types
-                        if hasattr(attr_value, 'item'):
-                            attr_value = attr_value.item()
-                        elif isinstance(attr_value, bytes):
-                            attr_value = attr_value.decode('utf-8', errors='ignore')
-                        result['metadata'][attr_name] = attr_value
-                    except Exception:
-                        continue  # Skip problematic attributes
-            except Exception as e:
-                result['processing_log'].append(f"Warning: Could not read file attributes: {str(e)}")
+            # Extract metadata
+            for attr_name in hdf_file.attrs:
+                result['metadata'][attr_name] = hdf_file.attrs[attr_name]
             
-            # Process datasets with priority order
+            # Process common dataset structures
             ue_events = []
             
-            # Primary datasets (most likely to contain UE events)
-            primary_datasets = ['ue_events', 'UE_events', 'events']
-            secondary_datasets = ['ue_data', 'UE_data', 'data', 'Data']
-            tertiary_datasets = [
+            # Look for UE event datasets - production patterns
+            potential_ue_datasets = [
+                'ue_events', 'UE_events', 'ue_data', 'UE_data',
                 'attach_events', 'detach_events', 'mobility_events',
-                'log_data', 'telecom_events', 'ue_attach', 'ue_detach', 
-                'attachment', 'detachment', 'session_events', 
-                'connection_events', 'network_events'
+                'events', 'log_data', 'telecom_events', 'data', 'Data',
+                'ue_attach', 'ue_detach', 'attachment', 'detachment',
+                'session_events', 'connection_events', 'network_events'
             ]
             
-            # Process in priority order
-            all_datasets = primary_datasets + secondary_datasets + tertiary_datasets
-            processed_datasets = set()
-            
-            for dataset_name in all_datasets:
-                if dataset_name in hdf_file and dataset_name not in processed_datasets:
-                    try:
-                        dataset = hdf_file[dataset_name]
-                        result['processing_log'].append(f"Processing dataset: {dataset_name}")
+            for dataset_name in potential_ue_datasets:
+                if dataset_name in hdf_file:
+                    dataset = hdf_file[dataset_name]
+                    
+                    # Handle different dataset structures
+                    if isinstance(dataset, h5py.Dataset):
+                        # Direct dataset
+                        data = dataset[:]
+                        events = _parse_dataset_to_events(data, dataset_name)
+                        ue_events.extend(events)
                         
-                        if isinstance(dataset, h5py.Dataset):
-                            # Direct dataset
-                            data = dataset[:]
-                            events = _parse_dataset_to_events(data, dataset_name)
-                            ue_events.extend(events)
-                            result['processing_log'].append(f"Extracted {len(events)} events from {dataset_name}")
-                            processed_datasets.add(dataset_name)
-                            
-                        elif isinstance(dataset, h5py.Group):
-                            # Group containing multiple datasets
-                            for sub_dataset_name in dataset.keys():
-                                try:
-                                    sub_dataset = dataset[sub_dataset_name]
-                                    if isinstance(sub_dataset, h5py.Dataset):
-                                        data = sub_dataset[:]
-                                        events = _parse_dataset_to_events(data, f"{dataset_name}/{sub_dataset_name}")
-                                        ue_events.extend(events)
-                                        result['processing_log'].append(f"Extracted {len(events)} events from {dataset_name}/{sub_dataset_name}")
-                                except Exception as e:
-                                    result['processing_log'].append(f"Error processing {dataset_name}/{sub_dataset_name}: {str(e)}")
-                                    continue
-                            processed_datasets.add(dataset_name)
-                    except Exception as e:
-                        result['processing_log'].append(f"Error processing {dataset_name}: {str(e)}")
-                        continue
+                    elif isinstance(dataset, h5py.Group):
+                        # Group containing multiple datasets
+                        for sub_dataset_name in dataset.keys():
+                            sub_dataset = dataset[sub_dataset_name]
+                            if isinstance(sub_dataset, h5py.Dataset):
+                                data = sub_dataset[:]
+                                events = _parse_dataset_to_events(data, f"{dataset_name}/{sub_dataset_name}")
+                                ue_events.extend(events)
             
-            # If no events found, try remaining datasets
+            # If no specific UE datasets found, try to extract from any available datasets
             if not ue_events:
-                result['processing_log'].append("No events found in primary datasets, trying all available datasets")
                 for dataset_name in hdf_file.keys():
-                    if dataset_name not in processed_datasets:
+                    if dataset_name not in potential_ue_datasets:
                         try:
                             dataset = hdf_file[dataset_name]
                             if isinstance(dataset, h5py.Dataset):
                                 data = dataset[:]
                                 events = _parse_dataset_to_events(data, dataset_name)
-                                if events:  # Only add if events were successfully parsed
-                                    ue_events.extend(events)
-                                    result['processing_log'].append(f"Extracted {len(events)} events from fallback dataset: {dataset_name}")
-                        except Exception as e:
-                            result['processing_log'].append(f"Error processing fallback dataset {dataset_name}: {str(e)}")
-                            continue
+                                ue_events.extend(events)
+                        except Exception:
+                            continue  # Skip problematic datasets
             
             result['ue_events'] = ue_events
-            result['total_events'] = len(ue_events)
-            
-            if ue_events:
-                result['processing_log'].append(f"Successfully processed {len(ue_events)} total events")
-            else:
-                result['processing_log'].append("Warning: No UE events could be extracted from any dataset")
-            
             return result
             
     except Exception as e:
-        return {
-            'error': f"Unexpected error processing HDF file: {str(e)}", 
-            'file_path': hdf_path,
-            'error_type': type(e).__name__
-        }
+        return {'error': f"Error processing HDF file: {str(e)}", 'file_path': hdf_path}
 
 def _parse_dataset_to_events(data: np.ndarray, dataset_name: str) -> List[Dict]:
     """
-    Parse dataset data into UE events with robust error handling.
+    Parse dataset data into UE events.
     
     Args:
         data: Raw dataset data
@@ -301,114 +238,60 @@ def _parse_dataset_to_events(data: np.ndarray, dataset_name: str) -> List[Dict]:
     events = []
     
     try:
-        # Validate data
-        if data is None or data.size == 0:
-            return events
-        
         # Handle different data types
-        if hasattr(data.dtype, 'names') and data.dtype.names:  # Structured array
+        if data.dtype.names:  # Structured array
             for i, record in enumerate(data):
-                try:
-                    event = {'source_dataset': dataset_name, 'record_index': i}
-                    
-                    for field_name in data.dtype.names:
-                        try:
-                            value = record[field_name]
-                            
-                            # Convert numpy types to Python types safely
-                            if isinstance(value, np.ndarray):
-                                if value.size == 1:
-                                    value = value.item()
-                                else:
-                                    value = value.tolist()
-                            elif isinstance(value, (np.integer, np.floating)):
-                                value = value.item()
-                            elif isinstance(value, np.bytes_):
-                                try:
-                                    value = value.decode('utf-8', errors='ignore')
-                                except:
-                                    value = str(value)  # Fallback to string representation
-                            elif isinstance(value, bytes):
-                                try:
-                                    value = value.decode('utf-8', errors='ignore')
-                                except:
-                                    value = str(value)
-                            
-                            event[field_name] = value
-                        except Exception as field_error:
-                            # Skip problematic fields but continue with record
-                            event[f'error_field_{field_name}'] = f"Field parsing error: {str(field_error)}"
-                            continue
-                    
-                    # Only add event if it has some valid data
-                    if len([k for k in event.keys() if not k.startswith('error_')]) > 2:  # More than just metadata
-                        # Determine event type based on field names and values
-                        try:
-                            event_type = _determine_event_type(event, dataset_name)
-                            event['event_type'] = event_type
-                        except:
-                            event['event_type'] = 'generic'
-                        
-                        # Extract UE ID if available
-                        try:
-                            ue_id = _extract_ue_id(event)
-                            if ue_id:
-                                event['ue_id'] = ue_id
-                        except:
-                            pass  # UE ID is optional
-                        
-                        # Extract timestamp if available
-                        try:
-                            timestamp = _extract_timestamp(event)
-                            if timestamp:
-                                event['timestamp'] = timestamp
-                        except:
-                            pass  # Timestamp is optional
-                        
-                        events.append(event)
-                        
-                except Exception as record_error:
-                    # Skip problematic records but continue processing
-                    continue
+                event = {'source_dataset': dataset_name, 'record_index': i}
                 
-        else:  # Simple array or unstructured data
-            # For simple arrays, create basic events
-            try:
-                for i, value in enumerate(data):
-                    try:
-                        # Convert value safely
-                        if hasattr(value, 'item'):
-                            clean_value = value.item()
-                        elif isinstance(value, (bytes, np.bytes_)):
-                            clean_value = value.decode('utf-8', errors='ignore')
+                for field_name in data.dtype.names:
+                    value = record[field_name]
+                    
+                    # Convert numpy types to Python types
+                    if isinstance(value, np.ndarray):
+                        if value.size == 1:
+                            value = value.item()
                         else:
-                            clean_value = value
-                        
-                        event = {
-                            'source_dataset': dataset_name,
-                            'record_index': i,
-                            'value': clean_value,
-                            'event_type': 'generic'
-                        }
-                        events.append(event)
-                    except:
-                        continue  # Skip problematic values
-            except Exception:
-                # If all else fails, create a summary event
-                events.append({
+                            value = value.tolist()
+                    elif isinstance(value, (np.integer, np.floating)):
+                        value = value.item()
+                    elif isinstance(value, np.bytes_):
+                        value = value.decode('utf-8', errors='ignore')
+                    
+                    event[field_name] = value
+                
+                # Determine event type based on field names and values
+                event_type = _determine_event_type(event, dataset_name)
+                event['event_type'] = event_type
+                
+                # Extract UE ID if available
+                ue_id = _extract_ue_id(event)
+                if ue_id:
+                    event['ue_id'] = ue_id
+                
+                # Extract timestamp if available
+                timestamp = _extract_timestamp(event)
+                if timestamp:
+                    event['timestamp'] = timestamp
+                
+                events.append(event)
+                
+        else:  # Simple array
+            # For simple arrays, create basic events
+            for i, value in enumerate(data):
+                event = {
                     'source_dataset': dataset_name,
-                    'summary': f"Dataset with {len(data) if hasattr(data, '__len__') else 'unknown'} entries",
-                    'event_type': 'summary',
-                    'data_type': str(data.dtype) if hasattr(data, 'dtype') else 'unknown'
-                })
+                    'record_index': i,
+                    'value': value.item() if hasattr(value, 'item') else value,
+                    'event_type': 'generic'
+                }
+                events.append(event)
     
     except Exception as e:
-        # Create an error event as last resort
+        # If parsing fails, create a single error event
         events.append({
             'source_dataset': dataset_name,
-            'error': f"Dataset parsing error: {str(e)}",
-            'event_type': 'error',
-            'error_type': type(e).__name__
+            'error': f"Parsing error: {str(e)}",
+            'event_type': 'error'
         })
     
     return events

@@ -1,11 +1,11 @@
 #!/bin/bash
-# Production installation with ClickHouse integration
+# Enhanced production installation
 
-echo "Telecom Anomaly Detection - ClickHouse Integration"
-echo "=================================================="
+echo "Telecom Anomaly Detection - Enhanced Production Setup"
+echo "====================================================="
 
-# Install Python dependencies
-pip install scapy h5py scikit-learn numpy pandas streamlit clickhouse-driver
+# Install dependencies
+pip install scapy h5py scikit-learn numpy pandas streamlit
 
 # Create directories
 mkdir -p logs models data
@@ -14,25 +14,16 @@ mkdir -p logs models data
 chmod +x run_system.py pcap_analyzer.py
 
 echo ""
-echo "CLICKHOUSE INTEGRATION FEATURES:"
-echo "  ✓ Automatic anomaly storage in ClickHouse database"
-echo "  ✓ Complete table structure with 14 fields"
-echo "  ✓ Categorization: NETWORK, UE_EVENTS, SYSTEM, OTHER"
-echo "  ✓ Severity mapping and affected systems identification"
-echo "  ✓ JSON metadata with full anomaly context"
-echo "  ✓ Connection testing with graceful fallback"
+echo "Enhanced features:"
+echo "  ✓ Production logging for HDF file diagnostics"
+echo "  ✓ Custom path support (searches only specified folder)"
+echo "  ✓ Enhanced error reporting and file discovery"
+echo "  ✓ Support for .hdf, .hdf5, .h5 extensions"
 echo ""
-echo "DATABASE CONFIGURATION:"
-echo "  Host: localhost:9000"
-echo "  Database: l1_app_db"
-echo "  User: default (no password)"
+echo "Usage:"
+echo "  python3 run_system.py /production/data  # Custom path"
+echo "  python3 run_system.py                   # Default dirs"
 echo ""
-echo "SETUP CLICKHOUSE:"
-echo "  1. Install ClickHouse server"
-echo "  2. Create database: CREATE DATABASE l1_app_db;"
-echo "  3. Create table using CLICKHOUSE_SETUP.md instructions"
-echo ""
-echo "USAGE:"
-echo "  python3 run_system.py /production/data"
-echo ""
-echo "All detected anomalies will be automatically stored in ClickHouse!"
+echo "MAC addresses configured:"
+echo "  RU: 6c:ad:ad:00:03:2a"
+echo "  DU: 00:11:22:33:44:67"
