@@ -851,7 +851,7 @@ class TelecomAnomalyDetector:
                 # Single file specified
                 if self.input_folder.endswith(('.pcap', '.cap')):
                     pcap_files.append(self.input_folder)
-                elif self.input_folder.endswith(('.h5', '.hdf5')):
+                elif self.input_folder.endswith(('.h5', '.hdf5', '.hdf')):
                     hdf_files.append(self.input_folder)
                 elif self.input_folder.endswith(('.txt', '.log')):
                     txt_files.append(self.input_folder)
@@ -862,6 +862,7 @@ class TelecomAnomalyDetector:
                 pcap_files.extend(glob.glob(os.path.join(self.input_folder, "*.cap")))
                 hdf_files.extend(glob.glob(os.path.join(self.input_folder, "*.h5")))
                 hdf_files.extend(glob.glob(os.path.join(self.input_folder, "*.hdf5")))
+                hdf_files.extend(glob.glob(os.path.join(self.input_folder, "*.hdf")))
                 txt_files.extend(glob.glob(os.path.join(self.input_folder, "*.txt")))
                 txt_files.extend(glob.glob(os.path.join(self.input_folder, "*.log")))
                 self.logger.info(f"Using custom input folder: {self.input_folder}")
@@ -876,6 +877,7 @@ class TelecomAnomalyDetector:
                     pcap_files.extend(glob.glob(os.path.join(data_dir, "*.cap")))
                     hdf_files.extend(glob.glob(os.path.join(data_dir, "*.h5")))
                     hdf_files.extend(glob.glob(os.path.join(data_dir, "*.hdf5")))
+                    hdf_files.extend(glob.glob(os.path.join(data_dir, "*.hdf")))
                     txt_files.extend(glob.glob(os.path.join(data_dir, "*.txt")))
                     txt_files.extend(glob.glob(os.path.join(data_dir, "*.log")))
                 else:
