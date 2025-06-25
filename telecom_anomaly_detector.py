@@ -1374,6 +1374,51 @@ class TelecomAnomalyDetector:
         print(f"     Log file: {filename}")
         print()
 
+    def _store_anomalies_in_clickhouse(self, detected_anomalies: List[Dict]) -> None:
+        """Store detected anomalies in ClickHouse database."""
+        try:
+            stored_count = 0
+            
+            for result in detected_anomalies:
+                if 'anomalies' in result and result['anomalies']:
+                    file_path = result.get('file', '')
+                    
+                    for anomaly in result['anomalies']:
+                        # Prepare anomaly data for ClickHouse
+                        anomaly_data = {
+                            'type': anomaly.get('type', 'unknown'),
+                            'description': anomaly.get('description', ''),
+                            'severity': anomaly.get('severity_level', anomaly.get('severity', 'MEDIUM')),
+                            'anomaly_score': result.get('anomaly_score', 0.0),
+                            'priority_score': anomaly.get('priority_score', 0.0),
+                            'timestamp': anomaly.get('timestamp', ''),
+                            'recommended_action': anomaly.get('recommended_action', ''),
+                            'log_details': anomaly.get('log_details', ''),
+                            'raw_data': {
+                                'impact_description': anomaly.get('impact_description', ''),
+                                'response_time': anomaly.get('response_time', ''),
+                                'escalation_required': anomaly.get('escalation_required', False)
+                            }
+                        }
+                        
+                        if self.clickhouse_storage.store_anomaly(anomaly_data, file_path):
+                            stored_count += 1
+            
+            if stored_count > 0:
+                print(f"\n✓ [DATABASE] Stored {stored_count} anomalies in ClickHouse")
+                
+                # Show recent statistics
+                try:
+                    stats = self.clickhouse_storage.get_anomaly_statistics()
+                    if stats and stats.get('total_anomalies', 0) > 0:
+                        print(f"✓ [DATABASE] Total anomalies in DB: {stats['total_anomalies']}")
+                except Exception:
+                    pass  # Skip statistics if unavailable
+                    
+        except Exception as e:
+            print(f"✗ [DATABASE] Error storing anomalies: {str(e)}")
+            print(f"  [DATABASE] ClickHouse may have disconnected during analysis")
+
 
 def main():
     """Main function to run the telecom anomaly detector."""
