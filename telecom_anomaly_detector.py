@@ -1396,11 +1396,16 @@ class TelecomAnomalyDetector:
             
             print(f"  [DATABASE] Processing {total_anomalies} anomalies for storage...")
             
+            anomaly_index = 0
+            
             for result in detected_anomalies:
                 if 'anomalies' in result and result['anomalies']:
                     file_path = result.get('file', '')
                     
                     for anomaly in result['anomalies']:
+                        anomaly_index += 1
+                        print(f"\n  [DATABASE] Processing anomaly {anomaly_index}/{total_anomalies}: {anomaly.get('type', 'unknown')}")
+                        
                         # Prepare anomaly data for ClickHouse
                         anomaly_data = {
                             'type': anomaly.get('type', 'unknown'),

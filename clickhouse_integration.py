@@ -182,10 +182,8 @@ class ClickHouseAnomalyStorage:
                 'affected_systems': self._identify_affected_systems(anomaly_data)
             }
             
-            # Insert into ClickHouse with proper parameter handling
-            # Insert using individual values to avoid tuple ordering issues
-            self.client.execute(
-                """
+            # Debug: Show exact query and parameters before insertion
+            insert_query = """
                 INSERT INTO anomalies (
                     id, anomaly_type, description, severity, status, source, log_line,
                     detected_at, resolved_at, metadata, resolution_steps, category,
@@ -196,13 +194,27 @@ class ClickHouseAnomalyStorage:
                     %(metadata)s, %(resolution_steps)s, %(category)s,
                     %(impact_level)s, %(affected_systems)s
                 )
-                """,
-                record
-            )
+                """
+            
+            print(f"\n[DEBUG] ClickHouse INSERT Query:")
+            print(insert_query)
+            print(f"\n[DEBUG] Parameters:")
+            for key, value in record.items():
+                if key == 'metadata':
+                    print(f"  {key}: {str(value)[:100]}..." if len(str(value)) > 100 else f"  {key}: {value}")
+                else:
+                    print(f"  {key}: {value}")
+            print(f"\n[DEBUG] Executing INSERT...")
+            
+            # Insert into ClickHouse with proper parameter handling
+            self.client.execute(insert_query, record)
+            
+            print(f"[DEBUG] INSERT completed successfully")
             
             return True
             
         except Exception as e:
+            print(f"\n[DEBUG] INSERT failed with error: {str(e)}")
             print(f"✗ Error storing anomaly: {str(e)}")
             return False
     
