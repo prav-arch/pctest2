@@ -23,6 +23,7 @@ class ClickHouseAnomalyStorage:
         
         Args:
             host: ClickHouse server host
+            
             port: ClickHouse server port
             database: Database name
             user: Username
