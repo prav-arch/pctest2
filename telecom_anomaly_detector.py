@@ -76,6 +76,39 @@ class TelecomAnomalyDetector:
         from cu_log_analyzer import CULogAnalyzer
         self.cu_log_analyzer = CULogAnalyzer()
         
+        # Initialize ClickHouse integration with detailed logging
+        self.clickhouse_storage = None
+        print("\n[DATABASE] Checking ClickHouse connection...")
+        try:
+            from clickhouse_integration import ClickHouseAnomalyStorage
+            self.clickhouse_storage = ClickHouseAnomalyStorage()
+            
+            print(f"[DATABASE] Attempting connection to localhost:9000/l1_app_db")
+            if self.clickhouse_storage.test_connection():
+                print("✓ [DATABASE] ClickHouse connection successful")
+                
+                if self.clickhouse_storage.ensure_table_exists():
+                    print("✓ [DATABASE] Table 'anomalies' verified/created")
+                    print("✓ [DATABASE] ClickHouse integration ENABLED - anomalies will be stored")
+                else:
+                    print("✗ [DATABASE] Table creation failed - storage DISABLED")
+                    self.clickhouse_storage = None
+            else:
+                print("✗ [DATABASE] ClickHouse connection failed - storage DISABLED")
+                print("  [DATABASE] Reason: Server not available on localhost:9000")
+                self.clickhouse_storage = None
+        except Exception as e:
+            print(f"✗ [DATABASE] ClickHouse integration failed - storage DISABLED")
+            print(f"  [DATABASE] Error: {str(e)}")
+            self.clickhouse_storage = None
+        
+        # Final status
+        if self.clickhouse_storage:
+            print("  [DATABASE] Status: CONNECTED and READY")
+        else:
+            print("  [DATABASE] Status: OFFLINE - system will continue without database storage")
+        print("-" * 60)
+        
         # Legacy telecom protocol ports (kept for backward compatibility)
         self.telecom_ports = {
             'CPRI': [8080, 8081, 8082],
@@ -1061,6 +1094,11 @@ class TelecomAnomalyDetector:
             
             # Display comprehensive anomaly summary
             self._display_comprehensive_anomaly_summary(detected_anomalies)
+            
+            # Store anomalies in ClickHouse database
+            if self.clickhouse_storage and detected_anomalies:
+                self._store_anomalies_in_clickhouse(detected_anomalies)
+            
             print("="*80)
         else:
             # Only print if files were actually processed
@@ -1122,6 +1160,10 @@ class TelecomAnomalyDetector:
                     anomaly_counter += 1
         
         print(f"\nTotal anomalies found: {anomaly_counter - 1}")
+        
+        # Store anomalies in ClickHouse database
+        if self.clickhouse_storage and detected_anomalies:
+            self._store_anomalies_in_clickhouse(detected_anomalies)
 
     def _display_file_results(self, result: Dict, prediction: int, anomaly_score: float) -> None:
         """Display analysis results for a single file."""

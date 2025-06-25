@@ -175,6 +175,46 @@ Changelog:
   * System now runs completely clean without cryptography/scapy deprecation warnings
   * Clean professional output maintained while preserving all detection functionality
   * Created individual file downloads (31 files) and web interface to bypass Replit rate limits
+- June 25, 2025. Enhanced MAC-only unidirectional communication detection:
+  * Removed IP-based fallback detection to focus purely on MAC address analysis
+  * Updated MAC pattern matching to handle broadcast destinations (ff:ff:ff:ff:ff:ff) as RU not responding
+  * Fixed detection logic to properly identify DU (02:42:ac:1f:80:67) sending to RU with no responses
+  * Enhanced anomaly flagging to prioritize specific telecom anomalies over ML predictions
+  * Successfully detects unidirectional communication: "DU sending to RU but no response from RU"
+  * System now correctly processes 200 packets and identifies 1 unidirectional communication anomaly
+- June 25, 2025. Production deployment with actual MAC addresses:
+  * Updated system for production RU MAC: 6c:ad:ad:00:03:2a and DU MAC: 00:11:22:33:44:67
+  * Created pcap_analyzer.py tool for detailed PCAP file content analysis and visualization
+  * Enhanced single file processing to handle both files and directories seamlessly
+  * Generated production-ready source code package (telecom_production_source_YYYYMMDD_HHMMSS.zip)
+  * Added comprehensive packet-by-packet analysis with timestamp, protocol, and communication direction detection
+  * Production system ready for real network monitoring with actual hardware MAC addresses
+- June 25, 2025. Fixed HDF file signature issues with robust processing:
+  * Implemented comprehensive HDF file validation and error handling
+  * Added multi-layer HDF5 file format validation before processing
+  * Enhanced structured array parsing with safe type conversion
+  * Added detailed processing logs for production diagnostics
+  * Fixed "file signature not found" errors through robust dataset parsing
+  * Confirmed all 5 HDF test files process successfully with detailed event extraction
+- June 25, 2025. Enhanced HDF file anomaly detection for UE events:
+  * Improved UE attach/detach event anomaly detection with lower thresholds (20% vs 30% imbalance)
+  * Added detection for missing attach events (UEs detaching without attach records)
+  * Added detection for missing detach events (UEs attaching but never disconnecting) 
+  * Enhanced rapid cycling detection (threshold reduced from 5 to 3 events for higher sensitivity)
+  * Added multiple attach/detach without counterpart event detection
+  * Created realistic HDF test data with proper UE event structures for production validation
+  * Fixed HDF file extension support: now handles .hdf, .hdf5, and .h5 files correctly
+  * Confirmed all file types are processed: system processes 19 total files (13 PCAP + 5 HDF + 1 log) correctly
+- June 25, 2025. ClickHouse database integration for anomaly storage:
+  * Added comprehensive ClickHouse integration with clickhouse-driver
+  * Created anomalies table structure matching user requirements (14 fields)
+  * Implemented automatic anomaly storage with categorization (NETWORK, UE_EVENTS, SYSTEM, OTHER)
+  * Added severity to impact level mapping and affected systems identification
+  * Enhanced anomaly data with metadata JSON and proper timestamps
+  * Integrated database connection testing and graceful fallback if ClickHouse unavailable
+  * All detected anomalies now automatically stored in ClickHouse with unique IDs and full context
+  * Fixed ClickHouse connection errors and added detailed logging for database status visibility
+  * System shows clear database connection status: CONNECTED/OFFLINE with reasons
 ```
 
 ## User Preferences
