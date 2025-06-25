@@ -35,7 +35,11 @@ def main():
             return 1
         print(f"Processing files from folder: {input_folder}")
     else:
-        print("Using default configured directories")
+        # Use default directory from config
+        from config import Config
+        config = Config()
+        input_folder = config.get_default_data_directory()
+        print(f"Using default folder from config: {input_folder}")
     
     try:
         # Initialize the detector with optional folder

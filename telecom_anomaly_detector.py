@@ -168,16 +168,23 @@ class TelecomAnomalyDetector:
             
             # Process each packet
             for i, packet in enumerate(packets):
-                if not packet.haslayer(IP):
+                # Skip non-Ethernet packets
+                if not packet.haslayer(Ether):
                     continue
-                    
-                ip_layer = packet[IP]
-                src_ip = ip_layer.src
-                dst_ip = ip_layer.dst
                 
-                # Extract MAC addresses
+                # Extract MAC addresses first
                 src_mac = packet[Ether].src if packet.haslayer(Ether) else None
                 dst_mac = packet[Ether].dst if packet.haslayer(Ether) else None
+                
+                # Get IP info if available, but don't require it
+                src_ip = None
+                dst_ip = None
+                if packet.haslayer(IP):
+                    ip_layer = packet[IP]
+                    src_ip = ip_layer.src
+                    dst_ip = ip_layer.dst
+                    
+
                 
                 # Create detailed packet log
                 packet_log = {
@@ -221,11 +228,17 @@ class TelecomAnomalyDetector:
                 else:
                     plane_separation['other'] += 1
                 
-                # Track flow statistics
-                flow_key = f"{src_ip}:{dst_ip}"
-                flow_stats[flow_key]['packets'] += 1
-                flow_stats[flow_key]['bytes'] += len(packet)
-                flow_stats[flow_key]['directions'].add(f"{src_ip}->{dst_ip}")
+                # Track flow statistics (use IPs if available, otherwise MACs)
+                if src_ip and dst_ip:
+                    flow_key = f"{src_ip}:{dst_ip}"
+                    flow_stats[flow_key]['packets'] += 1
+                    flow_stats[flow_key]['bytes'] += len(packet)
+                    flow_stats[flow_key]['directions'].add(f"{src_ip}->{dst_ip}")
+                elif src_mac and dst_mac:
+                    flow_key = f"{src_mac}:{dst_mac}"
+                    flow_stats[flow_key]['packets'] += 1
+                    flow_stats[flow_key]['bytes'] += len(packet)
+                    flow_stats[flow_key]['directions'].add(f"{src_mac}->{dst_mac}")
                 
                 # Track RU-DU communications with packet details based on MAC addresses
                 if self._is_ru_du_communication(src_mac, dst_mac):
@@ -237,6 +250,8 @@ class TelecomAnomalyDetector:
                         comm_key = f"{dst_mac}-{src_mac}"
                         ru_du_communications[comm_key]['ru_to_du'] += 1
                         ru_du_communications[comm_key]['ru_packets'].append(packet_log)
+                
+
             
             # Extract features for anomaly detection
             features = extract_telecom_features(
@@ -320,8 +335,13 @@ class TelecomAnomalyDetector:
         """Check if communication is between RU and DU based on MAC addresses."""
         if not src_mac or not dst_mac:
             return False
-        return (self._is_ru_mac(src_mac) and self._is_du_mac(dst_mac)) or \
-               (self._is_du_mac(src_mac) and self._is_ru_mac(dst_mac))
+        
+        # Check for DU sending to RU (including broadcast indicating no RU response)
+        du_to_ru = self._is_du_mac(src_mac) and (self._is_ru_mac(dst_mac) or dst_mac.lower() == "ff:ff:ff:ff:ff:ff")
+        # Check for RU sending to DU
+        ru_to_du = self._is_ru_mac(src_mac) and self._is_du_mac(dst_mac)
+        
+        return du_to_ru or ru_to_du
     
     def _is_du_mac(self, mac: str) -> bool:
         """Check if MAC address belongs to DU using production-ready patterns."""
@@ -350,7 +370,7 @@ class TelecomAnomalyDetector:
         """Detect specific telecom communication anomalies."""
         anomalies = []
         
-        # Check for unidirectional RU-DU communication
+        # Check for unidirectional RU-DU communication (DU sending but RU not responding)
         for comm_pair, stats in ru_du_communications.items():
             if stats['du_to_ru'] > 0 and stats['ru_to_du'] == 0:
                 # Get sample DU packets for logging
@@ -742,8 +762,18 @@ class TelecomAnomalyDetector:
         txt_files = []
         
         if self.input_folder:
-            # Use custom input folder if specified
-            if os.path.exists(self.input_folder):
+            # Check if input is a single file or directory
+            if os.path.isfile(self.input_folder):
+                # Single file specified
+                if self.input_folder.endswith(('.pcap', '.cap')):
+                    pcap_files.append(self.input_folder)
+                elif self.input_folder.endswith(('.h5', '.hdf5')):
+                    hdf_files.append(self.input_folder)
+                elif self.input_folder.endswith(('.txt', '.log')):
+                    txt_files.append(self.input_folder)
+                self.logger.info(f"Using single file: {self.input_folder}")
+            elif os.path.exists(self.input_folder):
+                # Directory specified
                 pcap_files.extend(glob.glob(os.path.join(self.input_folder, "*.pcap")))
                 pcap_files.extend(glob.glob(os.path.join(self.input_folder, "*.cap")))
                 hdf_files.extend(glob.glob(os.path.join(self.input_folder, "*.h5")))
@@ -752,7 +782,7 @@ class TelecomAnomalyDetector:
                 txt_files.extend(glob.glob(os.path.join(self.input_folder, "*.log")))
                 self.logger.info(f"Using custom input folder: {self.input_folder}")
             else:
-                self.logger.error(f"Custom input folder not found: {self.input_folder}")
+                self.logger.error(f"Custom input path not found: {self.input_folder}")
                 return
         else:
             # Use default configured directories
@@ -814,7 +844,8 @@ class TelecomAnomalyDetector:
                 ml_anomaly_detected = prediction == -1
                 low_anomaly_score = anomaly_score < -0.1
                 
-                is_anomaly = ml_anomaly_detected or has_specific_anomalies or low_anomaly_score
+                # Always flag as anomaly if specific telecom anomalies are detected
+                is_anomaly = has_specific_anomalies or ml_anomaly_detected or low_anomaly_score
                 
                 if is_anomaly:
                     detected_anomalies.append(result)
@@ -862,19 +893,19 @@ class TelecomAnomalyDetector:
                             detected_anomalies.append(result)
         
         # Display results for detected anomalies
-        for result in detected_anomalies:
+        if detected_anomalies:
+            print("\n" + "="*80)
+            print("TELECOM ANOMALY DETECTION RESULTS") 
+            print("="*80)
+            any_anomalies_found = True
+            
+            for result in detected_anomalies:
+                # Get prediction for this result
+                prediction, anomaly_score = self.predict_anomalies(result['features']) if 'features' in result else (-1, -0.5)
                 
-                if is_anomaly:
-                    if not any_anomalies_found:
-                        # Print header only when first anomaly is found
-                        print("\n" + "="*80)
-                        print("TELECOM ANOMALY DETECTION RESULTS")
-                        print("="*80)
-                        any_anomalies_found = True
-                    
-                    # Display results only for anomalous files
-                    self._display_file_results(result, prediction, anomaly_score)
-                    total_anomalies += 1
+                # Display results for anomalous files
+                self._display_file_results(result, prediction, anomaly_score)
+                total_anomalies += 1
         
         # Display summary based on whether anomalies were found
         if any_anomalies_found:

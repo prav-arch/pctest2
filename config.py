@@ -13,8 +13,12 @@ class Config:
         # Python script directory (hardcoded for Linux)
         self.PYTHON_DIRECTORY: str = "/usr/bin/python3"
         
+        # Default data directory for no-argument execution
+        self.DEFAULT_DATA_DIR = "mixed_data_folder"
+        
         # Single data directory containing both PCAP and HDF files
         self.DATA_DIRS: List[str] = [
+            "mixed_data_folder",    # Primary default
             "/var/log/telecom/data",
             "/opt/telecom/data",
             "/data/telecom",
@@ -62,12 +66,14 @@ class Config:
             "6c:ad:ad:00:03:2a",   # Actual RU MAC address
             "6c:ad:ad:00:03:",     # RU device family pattern
             "6c:ad:ad:",           # RU vendor prefix
+            "ff:ff:ff:ff:ff:ff",   # Broadcast - indicates RU not responding
         ]
         
         self.DU_MAC_PATTERNS: List[str] = [
             "00:11:22:33:44:67",   # Actual DU MAC address
             "00:11:22:33:44:",     # DU device family pattern
             "00:11:22:",           # DU vendor prefix for other devices
+            "02:42:ac:1f:80:67",   # DU pattern from PCAP data
         ]
         
         # Telecom protocol configurations
@@ -159,6 +165,10 @@ class Config:
         for directory in directories:
             os.makedirs(directory, exist_ok=True)
     
+    def get_default_data_directory(self) -> str:
+        """Get the default data directory from config."""
+        return self.DEFAULT_DATA_DIR
+    
     def get_pcap_directories(self) -> List[str]:
         """Get list of existing PCAP directories."""
         return [d for d in self.PCAP_DIRS if os.path.exists(d)]
@@ -172,14 +182,24 @@ class Config:
         if not mac:
             return False
         mac_upper = mac.upper()
-        return any(mac_upper.startswith(pattern.upper()) for pattern in self.RU_MAC_PATTERNS)
+        ru_patterns = [
+            "6C:AD:AD:00:03:2A",   # Production RU MAC address
+            "6C:AD:AD:00:03:",     # RU device family pattern
+            "6C:AD:AD:",           # RU vendor prefix
+        ]
+        return any(mac_upper.startswith(pattern.upper()) for pattern in ru_patterns)
     
     def is_du_mac(self, mac: str) -> bool:
         """Check if MAC address matches DU patterns."""
         if not mac:
             return False
         mac_upper = mac.upper()
-        for pattern in self.DU_MAC_PATTERNS:
+        du_patterns = [
+            "00:11:22:33:44:67",   # Production DU MAC address
+            "00:11:22:33:44:",     # DU device family pattern
+            "00:11:22:",           # DU vendor prefix for other devices
+        ]
+        for pattern in du_patterns:
             pattern_upper = pattern.upper()
             # Check for exact match or prefix match
             if mac_upper == pattern_upper or mac_upper.startswith(pattern_upper):
