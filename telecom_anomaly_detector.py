@@ -1407,17 +1407,23 @@ class TelecomAnomalyDetector:
             if stored_count > 0:
                 print(f"\n✓ [DATABASE] Stored {stored_count} anomalies in ClickHouse")
                 
-                # Show recent statistics
+                # Show recent statistics (skip if timeout issues)
                 try:
                     stats = self.clickhouse_storage.get_anomaly_statistics()
                     if stats and stats.get('total_anomalies', 0) > 0:
                         print(f"✓ [DATABASE] Total anomalies in DB: {stats['total_anomalies']}")
-                except Exception:
-                    pass  # Skip statistics if unavailable
+                except Exception as e:
+                    if "timed out" not in str(e).lower():
+                        pass  # Skip statistics if unavailable, but don't show timeout errors
                     
         except Exception as e:
-            print(f"✗ [DATABASE] Error storing anomalies: {str(e)}")
-            print(f"  [DATABASE] ClickHouse may have disconnected during analysis")
+            error_msg = str(e)
+            if "timed out" in error_msg.lower():
+                print(f"✗ [DATABASE] ClickHouse timeout during storage - anomalies detected but not stored")
+                print(f"  [DATABASE] Server may be overloaded or network slow")
+            else:
+                print(f"✗ [DATABASE] Error storing anomalies: {error_msg}")
+                print(f"  [DATABASE] ClickHouse may have disconnected during analysis")
 
 
 def main():

@@ -34,6 +34,8 @@ class ClickHouseAnomalyStorage:
         self.user = user
         self.password = password
         self.client = None
+        self.connection_timeout = 5  # 5 second timeout
+        self.insert_timeout = 10     # 10 second timeout for inserts
         self._connect()
     
     def _connect(self):
@@ -129,7 +131,7 @@ class ClickHouseAnomalyStorage:
     
     def store_anomaly(self, anomaly_data: Dict[str, Any], file_path: str = "") -> bool:
         """
-        Store a single anomaly in ClickHouse.
+        Store a single anomaly in ClickHouse with timeout handling.
         
         Args:
             anomaly_data: Anomaly information dictionary
@@ -140,7 +142,6 @@ class ClickHouseAnomalyStorage:
         """
         try:
             if not self.client:
-                print("No ClickHouse connection available")
                 return False
             
             # Generate unique ID
