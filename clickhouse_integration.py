@@ -172,7 +172,7 @@ class ClickHouseAnomalyStorage:
                 'status': 'OPEN',  # New anomalies start as OPEN
                 'source': f"telecom_detector_{file_path.split('/')[-1] if file_path else 'system'}",
                 'log_line': anomaly_data.get('log_details', '')[:1000],  # Limit log line length
-                'detected_at': datetime.now(),
+                'detected_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'resolved_at': None,
                 'metadata': json.dumps(metadata),
                 'resolution_steps': anomaly_data.get('recommended_action', ''),
@@ -182,16 +182,21 @@ class ClickHouseAnomalyStorage:
             }
             
             # Insert into ClickHouse with proper parameter handling
-            # Insert using simple VALUES format
+            # Insert using individual values to avoid tuple ordering issues
             self.client.execute(
                 """
                 INSERT INTO anomalies (
                     id, anomaly_type, description, severity, status, source, log_line,
                     detected_at, resolved_at, metadata, resolution_steps, category,
                     impact_level, affected_systems
-                ) VALUES
+                ) VALUES (
+                    %(id)s, %(anomaly_type)s, %(description)s, %(severity)s, %(status)s,
+                    %(source)s, %(log_line)s, %(detected_at)s, %(resolved_at)s,
+                    %(metadata)s, %(resolution_steps)s, %(category)s,
+                    %(impact_level)s, %(affected_systems)s
+                )
                 """,
-                [tuple(record.values())]
+                record
             )
             
             return True
