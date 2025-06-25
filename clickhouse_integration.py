@@ -164,7 +164,7 @@ class ClickHouseAnomalyStorage:
                 'raw_data': anomaly_data.get('raw_data', {})
             }
             
-            # Prepare record with None metadata to avoid timeout issues
+            # Prepare record without detected_at column
             record = {
                 'id': anomaly_id,
                 'anomaly_type': anomaly_type,
@@ -173,7 +173,6 @@ class ClickHouseAnomalyStorage:
                 'status': 'OPEN',  # New anomalies start as OPEN
                 'source': f"telecom_detector_{file_path.split('/')[-1] if file_path else 'system'}",
                 'log_line': anomaly_data.get('log_details', '')[:1000],  # Limit log line length
-                'detected_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'resolved_at': None,
                 'metadata': None,  # Set to None to avoid JSON parsing timeouts
                 'resolution_steps': anomaly_data.get('recommended_action', ''),
@@ -182,15 +181,15 @@ class ClickHouseAnomalyStorage:
                 'affected_systems': self._identify_affected_systems(anomaly_data)
             }
             
-            # Debug: Show exact query and parameters before insertion
+            # Debug: Show exact query and parameters before insertion (excluding detected_at)
             insert_query = """
                 INSERT INTO anomalies (
                     id, anomaly_type, description, severity, status, source, log_line,
-                    detected_at, resolved_at, metadata, resolution_steps, category,
+                    resolved_at, metadata, resolution_steps, category,
                     impact_level, affected_systems
                 ) VALUES (
                     %(id)s, %(anomaly_type)s, %(description)s, %(severity)s, %(status)s,
-                    %(source)s, %(log_line)s, %(detected_at)s, %(resolved_at)s,
+                    %(source)s, %(log_line)s, %(resolved_at)s,
                     %(metadata)s, %(resolution_steps)s, %(category)s,
                     %(impact_level)s, %(affected_systems)s
                 )
