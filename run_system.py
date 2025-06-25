@@ -8,6 +8,12 @@ Usage:
     python3 run_system.py /path/to/folder    # Use specific folder
 """
 
+import warnings
+# Suppress cryptography deprecation warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="cryptography")
+warnings.filterwarnings("ignore", message=".*CryptographyDeprecationWarning.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*", category=UserWarning)
+
 import sys
 import os
 from telecom_anomaly_detector import TelecomAnomalyDetector

@@ -9,11 +9,17 @@ import os
 import glob
 import logging
 import pickle
+import warnings
 import numpy as np
 import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Any
 from collections import defaultdict
+
+# Suppress cryptography deprecation warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="cryptography")
+warnings.filterwarnings("ignore", message=".*CryptographyDeprecationWarning.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*", category=UserWarning)
 
 # Third-party imports
 try:
@@ -877,6 +883,9 @@ class TelecomAnomalyDetector:
             
             # Display severity distribution
             self._display_severity_summary(all_results)
+            
+            # Display comprehensive anomaly summary
+            self._display_comprehensive_anomaly_summary(detected_anomalies)
             print("="*80)
         else:
             # Only print if files were actually processed
@@ -906,10 +915,39 @@ class TelecomAnomalyDetector:
         print(f"  MEDIUM:   {stats['counts'][SeverityLevel.MEDIUM]} ({stats['percentages'][SeverityLevel.MEDIUM]:.1f}%)")
         print(f"  LOW:      {stats['counts'][SeverityLevel.LOW]} ({stats['percentages'][SeverityLevel.LOW]:.1f}%)")
         print(f"  INFO:     {stats['counts'][SeverityLevel.INFO]} ({stats['percentages'][SeverityLevel.INFO]:.1f}%)")
-        
-        if stats['escalation_required'] > 0:
-            print(f"\nESCALATION REQUIRED: {stats['escalation_required']} high-priority anomalies need immediate attention")
     
+    def _display_comprehensive_anomaly_summary(self, detected_anomalies: List[Dict]) -> None:
+        """Display comprehensive summary of all anomalies with descriptions."""
+        if not detected_anomalies:
+            return
+        
+        print(f"\nALL DETECTED ANOMALIES:")
+        print(f"-" * 50)
+        
+        anomaly_counter = 1
+        for result in detected_anomalies:
+            if 'anomalies' in result and result['anomalies']:
+                filename = os.path.basename(result['file'])
+                print(f"\nFile: {filename}")
+                
+                for anomaly in result['anomalies']:
+                    severity = anomaly.get('severity_level', anomaly.get('severity', 'UNKNOWN'))
+                    anomaly_type = anomaly.get('type', 'unknown')
+                    description = anomaly.get('description', 'No description available')
+                    
+                    print(f"  {anomaly_counter}. [{severity}] {anomaly_type}")
+                    print(f"     Description: {description}")
+                    
+                    # Add additional context if available
+                    if 'impact_description' in anomaly:
+                        print(f"     Impact: {anomaly['impact_description']}")
+                    if 'recommended_action' in anomaly:
+                        print(f"     Action: {anomaly['recommended_action']}")
+                    
+                    anomaly_counter += 1
+        
+        print(f"\nTotal anomalies found: {anomaly_counter - 1}")
+
     def _display_file_results(self, result: Dict, prediction: int, anomaly_score: float) -> None:
         """Display analysis results for a single file."""
         filename = os.path.basename(result['file'])
@@ -956,8 +994,6 @@ class TelecomAnomalyDetector:
                     print(f"     Impact: {anomaly['impact_description']}")
                 if 'response_time' in anomaly:
                     print(f"     Response Time: {anomaly['response_time']}")
-                if 'escalation_required' in anomaly and anomaly['escalation_required']:
-                    print(f"     ESCALATION REQUIRED")
                 if 'recommended_action' in anomaly:
                     print(f"     Action: {anomaly['recommended_action']}")
                 
