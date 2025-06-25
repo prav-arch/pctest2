@@ -8,11 +8,14 @@ Usage:
     python3 run_system.py /path/to/folder    # Use specific folder
 """
 
-import warnings
-# Suppress cryptography deprecation warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="cryptography")
-warnings.filterwarnings("ignore", message=".*CryptographyDeprecationWarning.*")
-warnings.filterwarnings("ignore", message=".*deprecated.*", category=UserWarning)
+# Import warning suppression first
+try:
+    from suppress_warnings import *
+except ImportError:
+    import warnings
+    import os
+    warnings.filterwarnings("ignore")
+    os.environ['PYTHONWARNINGS'] = 'ignore'
 
 import sys
 import os

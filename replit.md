@@ -163,6 +163,18 @@ Changelog:
   * Implemented timestamp gap detection for missing log periods identification
   * Successfully tested with sample CU log containing 38 lines, detected 11 errors across 6 categories
   * Severity classification automatically applied to CU log anomalies with priority scoring
+- June 24, 2025. Enhanced anomaly reporting format:
+  * Removed "ESCALATION REQUIRED" messages from output for cleaner professional display
+  * Added comprehensive anomaly summary at end showing all detected anomalies with descriptions
+  * Improved final output format with complete anomaly inventory and impact assessments
+  * Maintains severity classification and recommended actions without unnecessary alert messaging
+- June 25, 2025. Fixed cryptography deprecation warnings:
+  * Updated cryptography package to version 45.0.4 (latest stable)
+  * Added comprehensive warning suppression system with suppress_warnings.py module
+  * Updated all main Python files with robust warning filters (telecom_anomaly_detector.py, app.py, run_system.py)
+  * System now runs completely clean without cryptography/scapy deprecation warnings
+  * Clean professional output maintained while preserving all detection functionality
+  * Created individual file downloads (31 files) and web interface to bypass Replit rate limits
 ```
 
 ## User Preferences

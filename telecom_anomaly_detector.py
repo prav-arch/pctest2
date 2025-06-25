@@ -5,21 +5,24 @@ Standalone Python script for detecting anomalies in PCAP and HDF files
 using Isolation Forest algorithm for unsupervised learning.
 """
 
+# Import warning suppression first
+try:
+    from suppress_warnings import *
+except ImportError:
+    import warnings
+    import os
+    warnings.filterwarnings("ignore")
+    os.environ['PYTHONWARNINGS'] = 'ignore'
+
 import os
 import glob
 import logging
 import pickle
-import warnings
 import numpy as np
 import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Any
 from collections import defaultdict
-
-# Suppress cryptography deprecation warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="cryptography")
-warnings.filterwarnings("ignore", message=".*CryptographyDeprecationWarning.*")
-warnings.filterwarnings("ignore", message=".*deprecated.*", category=UserWarning)
 
 # Third-party imports
 try:
