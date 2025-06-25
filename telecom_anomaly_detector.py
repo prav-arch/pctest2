@@ -885,6 +885,41 @@ class TelecomAnomalyDetector:
         
         self.logger.info(f"Found {len(pcap_files)} PCAP files, {len(hdf_files)} HDF files, and {len(txt_files)} CU log files")
         
+        # Production logging for HDF file detection
+        print(f"\n[FILE DISCOVERY] Found {len(pcap_files)} PCAP, {len(hdf_files)} HDF, {len(txt_files)} TXT files")
+        
+        if self.input_folder:
+            print(f"[SEARCH MODE] Custom path specified - searching ONLY in: {self.input_folder}")
+        else:
+            print(f"[SEARCH MODE] No custom path - searching in ALL configured directories:")
+            for i, data_dir in enumerate(self.config.DATA_DIRS, 1):
+                exists = os.path.exists(data_dir)
+                status = "EXISTS" if exists else "NOT FOUND"
+                print(f"  {i}. {data_dir} [{status}]")
+        
+        if hdf_files:
+            print("[HDF FILES DETECTED]")
+            for i, hdf_file in enumerate(hdf_files, 1):
+                print(f"  {i}. {hdf_file}")
+        else:
+            print("[NO HDF FILES FOUND] - Check file extensions and paths")
+            print("  Searching for: .hdf, .hdf5, .h5 extensions")
+            if self.input_folder:
+                print(f"  In custom folder: {self.input_folder}")
+                if os.path.exists(self.input_folder):
+                    all_files = os.listdir(self.input_folder)
+                    print(f"  Files in folder: {len(all_files)} total")
+                    hdf_like = [f for f in all_files if f.endswith(('.hdf', '.hdf5', '.h5', '.HDF', '.HDF5', '.H5'))]
+                    if hdf_like:
+                        print(f"  HDF-like files found: {hdf_like}")
+                    else:
+                        print(f"  No HDF files with supported extensions found")
+                else:
+                    print(f"  ERROR: Folder does not exist!")
+            else:
+                print(f"  In configured directories: {self.config.DATA_DIRS}")
+
+        
         # Process files and collect features
         all_features = []
         all_results = []
@@ -897,11 +932,30 @@ class TelecomAnomalyDetector:
                 all_results.append(result)
         
         # Process HDF files
+        hdf_processed_count = 0
         for hdf_file in hdf_files:
-            result = self.analyze_hdf_file(hdf_file)
-            if 'error' not in result:
-                all_features.append(result['features'])
-                all_results.append(result)
+            print(f"\n[HDF PROCESSING] Analyzing: {hdf_file}")
+            try:
+                result = self.analyze_hdf_file(hdf_file)
+                print(f"[HDF RESULT] Keys: {list(result.keys())}")
+                print(f"[HDF RESULT] Has error: {'error' in result}")
+                
+                if 'error' not in result:
+                    all_features.append(result['features'])
+                    all_results.append(result)
+                    hdf_processed_count += 1
+                    print(f"[HDF SUCCESS] File processed successfully")
+                    print(f"[HDF EVENTS] Total: {result.get('total_events', 0)}, Attach: {result.get('attach_events', 0)}, Detach: {result.get('detach_events', 0)}")
+                    if 'anomalies' in result and result['anomalies']:
+                        print(f"[HDF ANOMALIES] Found {len(result['anomalies'])} anomalies")
+                    else:
+                        print(f"[HDF NORMAL] No anomalies detected")
+                else:
+                    print(f"[HDF ERROR] {result.get('error', 'Unknown error')}")
+            except Exception as e:
+                print(f"[HDF EXCEPTION] Error processing {hdf_file}: {str(e)}")
+        
+        print(f"\n[HDF SUMMARY] Processed {hdf_processed_count}/{len(hdf_files)} HDF files successfully")
         
         # Process CU log files
         for txt_file in txt_files:
@@ -998,6 +1052,7 @@ class TelecomAnomalyDetector:
             print(f"\n" + "="*80)
             print(f"SUMMARY:")
             print(f"Total files processed: {len(all_results)}")
+            print(f"File breakdown: {len(pcap_files)} PCAP + {hdf_processed_count} HDF + {len(txt_files)} TXT = {len(all_results)} total")
             print(f"Anomalies detected: {total_anomalies}")
             print(f"Anomaly rate: {total_anomalies/len(all_results)*100:.2f}%")
             
