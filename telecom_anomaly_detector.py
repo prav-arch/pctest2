@@ -1161,9 +1161,14 @@ class TelecomAnomalyDetector:
         
         print(f"\nTotal anomalies found: {anomaly_counter - 1}")
         
-        # Store anomalies in ClickHouse database
+        # Store anomalies in ClickHouse database (with timeout protection)
         if self.clickhouse_storage and detected_anomalies:
-            self._store_anomalies_in_clickhouse(detected_anomalies)
+            print("  [DATABASE] Attempting to store anomalies...")
+            try:
+                self._store_anomalies_in_clickhouse(detected_anomalies)
+            except Exception as e:
+                print(f"  [DATABASE] Storage failed: {str(e)}")
+                # Continue without database storage
 
     def _display_file_results(self, result: Dict, prediction: int, anomaly_score: float) -> None:
         """Display analysis results for a single file."""
@@ -1375,9 +1380,21 @@ class TelecomAnomalyDetector:
         print()
 
     def _store_anomalies_in_clickhouse(self, detected_anomalies: List[Dict]) -> None:
-        """Store detected anomalies in ClickHouse database."""
+        """Store detected anomalies in ClickHouse database with timeout protection."""
+        import signal
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutError("ClickHouse operation timed out")
+        
         try:
+            # Set a 15-second timeout for the entire storage operation
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(15)
+            
             stored_count = 0
+            total_anomalies = sum(len(result.get('anomalies', [])) for result in detected_anomalies if 'anomalies' in result)
+            
+            print(f"  [DATABASE] Processing {total_anomalies} anomalies for storage...")
             
             for result in detected_anomalies:
                 if 'anomalies' in result and result['anomalies']:
@@ -1404,26 +1421,28 @@ class TelecomAnomalyDetector:
                         if self.clickhouse_storage.store_anomaly(anomaly_data, file_path):
                             stored_count += 1
             
+            # Cancel the alarm
+            signal.alarm(0)
+            
             if stored_count > 0:
-                print(f"\n✓ [DATABASE] Stored {stored_count} anomalies in ClickHouse")
+                print(f"✓ [DATABASE] Stored {stored_count} anomalies in ClickHouse")
                 
-                # Show recent statistics (skip if timeout issues)
-                try:
-                    stats = self.clickhouse_storage.get_anomaly_statistics()
-                    if stats and stats.get('total_anomalies', 0) > 0:
-                        print(f"✓ [DATABASE] Total anomalies in DB: {stats['total_anomalies']}")
-                except Exception as e:
-                    if "timed out" not in str(e).lower():
-                        pass  # Skip statistics if unavailable, but don't show timeout errors
+                # Skip statistics to avoid additional timeout risk
+                print(f"✓ [DATABASE] Storage operation completed successfully")
+            else:
+                print(f"✗ [DATABASE] No anomalies were stored")
                     
+        except TimeoutError:
+            signal.alarm(0)  # Cancel alarm
+            print(f"✗ [DATABASE] ClickHouse storage timed out (15s) - continuing without storage")
         except Exception as e:
+            signal.alarm(0)  # Cancel alarm
             error_msg = str(e)
             if "timed out" in error_msg.lower():
-                print(f"✗ [DATABASE] ClickHouse timeout during storage - anomalies detected but not stored")
-                print(f"  [DATABASE] Server may be overloaded or network slow")
+                print(f"✗ [DATABASE] ClickHouse timeout during storage - continuing")
             else:
-                print(f"✗ [DATABASE] Error storing anomalies: {error_msg}")
-                print(f"  [DATABASE] ClickHouse may have disconnected during analysis")
+                print(f"✗ [DATABASE] Storage error: {error_msg}")
+                print(f"  [DATABASE] Continuing without database storage")
 
 
 def main():
