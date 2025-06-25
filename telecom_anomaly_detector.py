@@ -501,64 +501,148 @@ class TelecomAnomalyDetector:
             return {'error': str(e), 'file': hdf_path}
     
     def _detect_ue_event_anomalies(self, attach_events: List, detach_events: List) -> List[Dict]:
-        """Detect anomalies in UE attach/detach events."""
+        """Detect anomalies in UE attach/detach events with enhanced sensitivity."""
         anomalies = []
         
-        # Check for unbalanced attach/detach ratio
-        if len(attach_events) > 0 or len(detach_events) > 0:
-            total_events = len(attach_events) + len(detach_events)
-            attach_ratio = len(attach_events) / total_events
-            detach_ratio = len(detach_events) / total_events
-            
-            # Expect roughly balanced attach/detach events
-            if abs(attach_ratio - detach_ratio) > 0.3:  # More than 30% difference
-                # Get sample events for logging
-                sample_attach_events = attach_events[:3] if attach_events else []
-                sample_detach_events = detach_events[:3] if detach_events else []
-                context = {
-                    'affected_devices': len(set([e.get('ue_id') for e in attach_events + detach_events])),
-                    'packet_loss_rate': abs(attach_ratio - detach_ratio),
-                    'duration_minutes': 20,
-                    'is_business_hours': True,
-                    'anomaly_score': -0.3
-                }
-                anomalies.append({
-                    'type': 'unbalanced_attach_detach',
-                    'description': f"Unbalanced attach/detach ratio: {attach_ratio:.2%} attach, {detach_ratio:.2%} detach",
-                    'context': context,
-                    'severity': 'medium',
-                    'details': {'attach_count': len(attach_events), 'detach_count': len(detach_events)},
-                    'sample_attach_events': sample_attach_events,
-                    'sample_detach_events': sample_detach_events,
-                    'total_attach_events': len(attach_events),
-                    'total_detach_events': len(detach_events)
-                })
+        # Check for any UE events first
+        total_events = len(attach_events) + len(detach_events)
+        if total_events == 0:
+            return anomalies
         
-        # Check for rapid attach/detach cycles (same UE)
-        ue_event_counts = defaultdict(lambda: {'attach': 0, 'detach': 0})
+        # 1. Check for unbalanced attach/detach ratio (lowered threshold)
+        attach_ratio = len(attach_events) / total_events
+        detach_ratio = len(detach_events) / total_events
+        
+        # More sensitive threshold - expect roughly balanced events
+        if abs(attach_ratio - detach_ratio) > 0.2:  # Reduced from 30% to 20%
+            sample_attach_events = attach_events[:3] if attach_events else []
+            sample_detach_events = detach_events[:3] if detach_events else []
+            
+            # Determine severity based on imbalance level
+            imbalance = abs(attach_ratio - detach_ratio)
+            severity = 'critical' if imbalance > 0.7 else 'high' if imbalance > 0.5 else 'medium'
+            
+            context = {
+                'affected_devices': len(set([e.get('ue_id') for e in attach_events + detach_events if e.get('ue_id')])),
+                'packet_loss_rate': imbalance,
+                'duration_minutes': 20,
+                'is_business_hours': True,
+                'anomaly_score': -0.4 - imbalance
+            }
+            
+            anomalies.append({
+                'type': 'unbalanced_attach_detach',
+                'description': f"Unbalanced UE events: {attach_ratio:.1%} attach, {detach_ratio:.1%} detach (imbalance: {imbalance:.1%})",
+                'context': context,
+                'severity': severity,
+                'details': {'attach_count': len(attach_events), 'detach_count': len(detach_events)},
+                'sample_attach_events': sample_attach_events,
+                'sample_detach_events': sample_detach_events,
+                'total_attach_events': len(attach_events),
+                'total_detach_events': len(detach_events)
+            })
+        
+        # 2. Check for only attach events (UEs connecting but never disconnecting)
+        if len(attach_events) > 0 and len(detach_events) == 0:
+            context = {
+                'affected_devices': len(set([e.get('ue_id') for e in attach_events if e.get('ue_id')])),
+                'packet_loss_rate': 1.0,
+                'duration_minutes': 30,
+                'is_business_hours': True,
+                'anomaly_score': -0.8
+            }
+            anomalies.append({
+                'type': 'missing_detach_events',
+                'description': f"UEs attaching but never detaching: {len(attach_events)} attach events, 0 detach events",
+                'context': context,
+                'severity': 'critical',
+                'details': {'attach_count': len(attach_events), 'detach_count': 0},
+                'sample_attach_events': attach_events[:3],
+                'total_attach_events': len(attach_events),
+                'total_detach_events': 0
+            })
+        
+        # 3. Check for only detach events (UEs disconnecting without attach records)
+        if len(detach_events) > 0 and len(attach_events) == 0:
+            context = {
+                'affected_devices': len(set([e.get('ue_id') for e in detach_events if e.get('ue_id')])),
+                'packet_loss_rate': 1.0,
+                'duration_minutes': 30,
+                'is_business_hours': True,
+                'anomaly_score': -0.7
+            }
+            anomalies.append({
+                'type': 'missing_attach_events',
+                'description': f"UEs detaching without attach records: 0 attach events, {len(detach_events)} detach events",
+                'context': context,
+                'severity': 'high',
+                'details': {'attach_count': 0, 'detach_count': len(detach_events)},
+                'sample_detach_events': detach_events[:3],
+                'total_attach_events': 0,
+                'total_detach_events': len(detach_events)
+            })
+        
+        # 4. Check for rapid attach/detach cycles (lowered threshold)
+        ue_event_counts = defaultdict(lambda: {'attach': 0, 'detach': 0, 'attach_events': [], 'detach_events': []})
         
         for event in attach_events:
             ue_id = event.get('ue_id', 'unknown')
             ue_event_counts[ue_id]['attach'] += 1
+            ue_event_counts[ue_id]['attach_events'].append(event)
         
         for event in detach_events:
             ue_id = event.get('ue_id', 'unknown')
             ue_event_counts[ue_id]['detach'] += 1
+            ue_event_counts[ue_id]['detach_events'].append(event)
         
         for ue_id, counts in ue_event_counts.items():
-            if counts['attach'] > 5 or counts['detach'] > 5:  # Threshold for rapid cycling
-                # Get sample events for this UE
-                ue_attach_events = [e for e in attach_events if e.get('ue_id') == ue_id][:3]
-                ue_detach_events = [e for e in detach_events if e.get('ue_id') == ue_id][:3]
+            # Lowered threshold from 5 to 3 for more sensitive detection
+            if counts['attach'] > 3 or counts['detach'] > 3:
+                severity = 'critical' if max(counts['attach'], counts['detach']) > 10 else 'high'
+                
+                context = {
+                    'affected_devices': 1,
+                    'packet_loss_rate': 0.5,
+                    'duration_minutes': 15,
+                    'is_business_hours': True,
+                    'anomaly_score': -0.6
+                }
+                
                 anomalies.append({
                     'type': 'rapid_attach_detach_cycle',
-                    'description': f"UE {ue_id} has rapid attach/detach cycles",
-                    'severity': 'high',
+                    'description': f"UE {ue_id} rapid cycling: {counts['attach']} attaches, {counts['detach']} detaches",
+                    'context': context,
+                    'severity': severity,
                     'details': {'ue_id': ue_id, 'counts': counts},
-                    'sample_ue_attach_events': ue_attach_events,
-                    'sample_ue_detach_events': ue_detach_events,
-                    'total_ue_attach_events': len([e for e in attach_events if e.get('ue_id') == ue_id]),
-                    'total_ue_detach_events': len([e for e in detach_events if e.get('ue_id') == ue_id])
+                    'sample_ue_attach_events': counts['attach_events'][:3],
+                    'sample_ue_detach_events': counts['detach_events'][:3],
+                    'total_ue_attach_events': counts['attach'],
+                    'total_ue_detach_events': counts['detach']
+                })
+        
+        # 5. Check for excessive single-type events per UE
+        for ue_id, counts in ue_event_counts.items():
+            if counts['attach'] > 1 and counts['detach'] == 0:
+                # UE attempting multiple attaches without detaching
+                anomalies.append({
+                    'type': 'multiple_attach_no_detach',
+                    'description': f"UE {ue_id} multiple attach attempts without detach: {counts['attach']} attaches",
+                    'severity': 'medium',
+                    'details': {'ue_id': ue_id, 'attach_count': counts['attach']},
+                    'sample_ue_attach_events': counts['attach_events'][:3],
+                    'total_ue_attach_events': counts['attach'],
+                    'total_ue_detach_events': 0
+                })
+            elif counts['detach'] > 1 and counts['attach'] == 0:
+                # UE detaching multiple times without attach records
+                anomalies.append({
+                    'type': 'multiple_detach_no_attach',
+                    'description': f"UE {ue_id} multiple detach events without attach: {counts['detach']} detaches",
+                    'severity': 'medium',
+                    'details': {'ue_id': ue_id, 'detach_count': counts['detach']},
+                    'sample_ue_detach_events': counts['detach_events'][:3],
+                    'total_ue_attach_events': 0,
+                    'total_ue_detach_events': counts['detach']
                 })
         
         return self._apply_severity_classification(anomalies)

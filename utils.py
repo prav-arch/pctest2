@@ -176,11 +176,13 @@ def process_hdf_file(hdf_path: str) -> Dict[str, Any]:
             # Process common dataset structures
             ue_events = []
             
-            # Look for UE event datasets
+            # Look for UE event datasets - production patterns
             potential_ue_datasets = [
                 'ue_events', 'UE_events', 'ue_data', 'UE_data',
                 'attach_events', 'detach_events', 'mobility_events',
-                'events', 'log_data', 'telecom_events'
+                'events', 'log_data', 'telecom_events', 'data', 'Data',
+                'ue_attach', 'ue_detach', 'attachment', 'detachment',
+                'session_events', 'connection_events', 'network_events'
             ]
             
             for dataset_name in potential_ue_datasets:
@@ -299,12 +301,73 @@ def _determine_event_type(event: Dict, dataset_name: str) -> str:
     Determine the type of UE event based on available data.
     
     Args:
-        event: Event dictionary
-        dataset_name: Source dataset name
+        event: Event dictionary with parsed fields
+        dataset_name: Name of source dataset
         
     Returns:
-        Event type string
+        Event type string ('attach', 'detach', or 'generic')
     """
+    # Check for explicit event_type field
+    if 'event_type' in event:
+        event_type_val = event['event_type']
+        if event_type_val == 1 or str(event_type_val).lower() in ['attach', 'attachment']:
+            return 'attach'
+        elif event_type_val == 2 or str(event_type_val).lower() in ['detach', 'detachment']:
+            return 'detach'
+    
+    # Check dataset name patterns
+    dataset_lower = dataset_name.lower()
+    if 'attach' in dataset_lower:
+        return 'attach'
+    elif 'detach' in dataset_lower:
+        return 'detach'
+    
+    # Check for other field patterns
+    for field_name, value in event.items():
+        field_lower = str(field_name).lower()
+        value_str = str(value).lower()
+        
+        if 'attach' in field_lower or 'attach' in value_str:
+            return 'attach'
+        elif 'detach' in field_lower or 'detach' in value_str:
+            return 'detach'
+    
+    return 'generic'
+
+def _extract_ue_id(event: Dict) -> Optional[str]:
+    """Extract UE ID from event data."""
+    # Look for common UE ID field names
+    ue_id_fields = ['ue_id', 'UE_id', 'user_id', 'subscriber_id', 'imsi', 'tmsi']
+    
+    for field in ue_id_fields:
+        if field in event:
+            value = event[field]
+            if isinstance(value, bytes):
+                return value.decode('utf-8', errors='ignore')
+            return str(value)
+    
+    return None
+
+def _extract_timestamp(event: Dict) -> Optional[float]:
+    """Extract timestamp from event data."""
+    # Look for common timestamp field names
+    timestamp_fields = ['timestamp', 'time', 'event_time', 'create_time']
+    
+    for field in timestamp_fields:
+        if field in event:
+            value = event[field]
+            if isinstance(value, (int, float)):
+                return float(value)
+            elif isinstance(value, str):
+                try:
+                    return float(value)
+                except ValueError:
+                    continue
+    
+    return None
+
+def extract_event_metadata(event: Dict, dataset_name: str) -> str:
+    """Extract event metadata for classification."""
     # Check dataset name for hints
     dataset_lower = dataset_name.lower()
     if 'attach' in dataset_lower:
