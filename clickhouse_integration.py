@@ -86,36 +86,34 @@ class ClickHouseAnomalyStorage:
             if not self.client:
                 return False
             
-            # Check if table exists
-            result = self.client.execute(
-                "SELECT name FROM system.tables WHERE database = %s AND name = 'anomalies'",
-                [self.database]
-            )
+            if not table_exists:
+                print("  [DATABASE] Table 'anomalies' not found, creating...")
+                # Create table
+                create_table_sql = """
+                CREATE TABLE anomalies (
+                    id String,
+                    anomaly_type String,
+                    description String,
+                    severity String,
+                    status String,
+                    source String,
+                    log_line String,
+                    detected_at DateTime DEFAULT now(),
+                    resolved_at DateTime,
+                    metadata String,
+                    resolution_steps String,
+                    category String,
+                    impact_level String,
+                    affected_systems String
+                ) ENGINE = MergeTree()
+                ORDER BY detected_at
+                """
+                
+                self.client.execute(create_table_sql)
+                print("  [DATABASE] Table 'anomalies' created successfully")
+            else:
+                print("  [DATABASE] Table 'anomalies' already exists")
             
-            if not result:
-                print("Table 'anomalies' does not exist. Please create it manually:")
-                print("""
-CREATE TABLE anomalies (
-    id String,
-    anomaly_type String,
-    description String,
-    severity String,
-    status String,
-    source String,
-    log_line String,
-    detected_at DateTime DEFAULT now(),
-    resolved_at DateTime,
-    metadata String,
-    resolution_steps String,
-    category String,
-    impact_level String,
-    affected_systems String
-) ENGINE = MergeTree()
-ORDER BY detected_at
-                """)
-                return False
-            
-            print("✓ Table 'anomalies' exists")
             return True
             
         except Exception as e:
@@ -177,20 +175,17 @@ ORDER BY detected_at
             }
             
             # Insert into ClickHouse with proper parameter handling
-            insert_query = """
+            # Insert using simple VALUES format
+            self.client.execute(
+                """
                 INSERT INTO anomalies (
                     id, anomaly_type, description, severity, status, source, log_line,
                     detected_at, resolved_at, metadata, resolution_steps, category,
                     impact_level, affected_systems
-                ) VALUES (
-                    %(id)s, %(anomaly_type)s, %(description)s, %(severity)s, %(status)s, 
-                    %(source)s, %(log_line)s, %(detected_at)s, %(resolved_at)s, 
-                    %(metadata)s, %(resolution_steps)s, %(category)s, 
-                    %(impact_level)s, %(affected_systems)s
-                )
-            """
-            
-            self.client.execute(insert_query, record)
+                ) VALUES
+                """,
+                [tuple(record.values())]
+            )
             
             return True
             
