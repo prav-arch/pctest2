@@ -196,8 +196,11 @@ class ClickHouseAnomalyStorage:
                 transport_ok = 1  # Transport ok for informational anomalies
             
             # Prepare parameters for exact fh_violations structure
+            from datetime import datetime
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
             params = [(
-                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),  # event_time
+                current_time,                                    # event_time (string format)
                 str(record.get('anomaly_type', 'unknown')),     # type
                 severity_enum,                                   # severity (Enum8)
                 str(record['description']) if record['description'] else '',  # description
@@ -229,8 +232,16 @@ class ClickHouseAnomalyStorage:
             return True
             
         except Exception as e:
-            print(f"\n[DEBUG] INSERT failed with error: {str(e)}")
-            print(f"✗ Error storing anomaly: {str(e)}")
+            error_msg = str(e)
+            print(f"\n[DEBUG] INSERT failed with error: {error_msg}")
+            
+            # Handle specific datetime errors
+            if "tzinfo" in error_msg:
+                print(f"[DEBUG] DateTime timezone error - using string format instead")
+            elif "Enum8" in error_msg:
+                print(f"[DEBUG] Enum8 error - check severity values")
+            
+            print(f"✗ Error storing anomaly: {error_msg}")
             return False
     
     def store_multiple_anomalies(self, anomalies: List[Dict[str, Any]], file_path: str = "") -> int:
