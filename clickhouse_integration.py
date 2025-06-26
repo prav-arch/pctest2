@@ -93,29 +93,21 @@ class ClickHouseAnomalyStorage:
             table_names = [table[0] for table in tables]
             print(f"  [DATABASE] Available tables: {table_names}")
             
-            table_exists = 'anomalies' in table_names
+            table_exists = 'fh_violations' in table_names
             
             if not table_exists:
-                print("  [DATABASE] Table 'anomalies' not found, creating...")
-                # Create table
+                print("  [DATABASE] Table 'fh_violations' not found, creating...")
+                # Create fh_violations table matching user's structure
                 create_table_sql = """
-                CREATE TABLE anomalies (
+                CREATE TABLE fh_violations (
                     id String,
-                    anomaly_type String,
-                    description String,
-                    severity String,
-                    status String,
-                    source String,
+                    timestamp DateTime,
                     log_line String,
-                    detected_at DateTime DEFAULT now(),
-                    resolved_at DateTime,
-                    metadata String,
-                    resolution_steps String,
-                    category String,
-                    impact_level String,
-                    affected_systems String
+                    description String,
+                    severity UInt8,        -- 4=Critical, 3=High, 1=Warning
+                    severity_level UInt8   -- Alternative severity field
                 ) ENGINE = MergeTree()
-                ORDER BY detected_at
+                ORDER BY timestamp
                 """
                 
                 self.client.execute(create_table_sql)
@@ -180,43 +172,48 @@ class ClickHouseAnomalyStorage:
                 'affected_systems': self._identify_affected_systems(anomaly_data)
             }
             
-            # Use tuple parameter format as specified
+            # Map to fh_violations table structure
             query = """
-            INSERT INTO anomalies 
-            (id, anomaly_type, description, severity, status, source, log_line, 
-             metadata, resolution_steps, category, impact_level, affected_systems)
+            INSERT INTO fh_violations 
+            (id, timestamp, log_line, description, severity, severity_level)
             VALUES
             """
             
-            # Ensure all values are properly handled (convert None to empty string for all fields)
+            # Convert severity to UInt8 (4=Critical, 3=High, 1=Warning)
+            severity_mapping = {
+                'CRITICAL': 4,
+                'HIGH': 3,
+                'MEDIUM': 2,
+                'LOW': 1,
+                'INFO': 1
+            }
+            
+            severity_num = severity_mapping.get(record.get('severity', 'MEDIUM'), 2)
+            
+            # Prepare parameters for fh_violations table (6 fields)
             params = [(
                 str(record['id']) if record['id'] else '',
-                str(record['anomaly_type']) if record['anomaly_type'] else '',
-                str(record['description']) if record['description'] else '',
-                str(record['severity']) if record['severity'] else 'MEDIUM',
-                str(record['status']) if record['status'] else 'OPEN',
-                str(record['source']) if record['source'] else '',
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),  # timestamp
                 str(record['log_line']) if record['log_line'] else '',
-                '',  # metadata - empty string to avoid encoding issues
-                str(record['resolution_steps']) if record['resolution_steps'] else '',
-                str(record['category']) if record['category'] else 'OTHER',
-                str(record['impact_level']) if record['impact_level'] else 'MEDIUM',
-                str(record['affected_systems']) if record['affected_systems'] else ''
+                str(record['description']) if record['description'] else '',
+                severity_num,  # severity as UInt8
+                severity_num   # severity_level as UInt8 (same value)
             )]
             
             print(f"\n[DEBUG] ClickHouse INSERT Query:")
             print(query)
-            print(f"\n[DEBUG] Tuple Parameters:")
-            param_names = ['id', 'anomaly_type', 'description', 'severity', 'status', 'source', 
-                          'log_line', 'metadata', 'resolution_steps', 'category', 'impact_level', 'affected_systems']
+            print(f"\n[DEBUG] Tuple Parameters for fh_violations:")
+            param_names = ['id', 'timestamp', 'log_line', 'description', 'severity', 'severity_level']
             for i, (name, value) in enumerate(zip(param_names, params[0])):
-                if name == 'metadata':
-                    print(f"  {i+1}. {name}: '{value}' (empty string - avoiding encoding issues)")
+                if name in ['severity', 'severity_level']:
+                    severity_names = {4: 'CRITICAL', 3: 'HIGH', 2: 'MEDIUM', 1: 'LOW'}
+                    severity_name = severity_names.get(value, 'UNKNOWN')
+                    print(f"  {i+1}. {name}: {value} (UInt8 - {severity_name})")
                 else:
                     value_type = type(value).__name__
-                    value_len = len(str(value))
+                    value_len = len(str(value)) if isinstance(value, str) else len(str(value))
                     print(f"  {i+1}. {name}: {value} ({value_type}, len={value_len})")
-            print(f"\n[DEBUG] Executing INSERT with tuple parameters...")
+            print(f"\n[DEBUG] Executing INSERT into fh_violations...")
             
             # Insert using tuple parameters
             self.client.execute(query, params)
