@@ -172,11 +172,11 @@ class ClickHouseAnomalyStorage:
                 'affected_systems': self._identify_affected_systems(anomaly_data)
             }
             
-            # Map to fh_violations table structure (6 fields)
+            # Map to fh_violations table structure using now() for event_time
             query = """
             INSERT INTO fh_violations 
             (event_time, type, severity, description, log_line, transport_ok)
-            VALUES
+            VALUES (now(), ?, ?, ?, ?, ?)
             """
             
             # Convert severity to Enum8 values
@@ -195,24 +195,20 @@ class ClickHouseAnomalyStorage:
             if record.get('anomaly_type') in ['info', 'low_priority']:
                 transport_ok = 1  # Transport ok for informational anomalies
             
-            # Prepare parameters for exact fh_violations structure
-            import datetime as dt
-            current_time = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            
-            params = [(
-                current_time,                                    # event_time (string format)
+            # Prepare parameters for exact fh_violations structure (5 fields, event_time uses now())
+            params = (
                 str(record.get('anomaly_type', 'unknown')),     # type
                 severity_enum,                                   # severity (Enum8)
                 str(record['description']) if record['description'] else '',  # description
                 str(record['log_line']) if record['log_line'] else '',        # log_line
                 transport_ok                                     # transport_ok (UInt8)
-            )]
+            )
             
             print(f"\n[DEBUG] ClickHouse INSERT Query:")
             print(query)
-            print(f"\n[DEBUG] Tuple Parameters for fh_violations:")
-            param_names = ['event_time', 'type', 'severity', 'description', 'log_line', 'transport_ok']
-            for i, (name, value) in enumerate(zip(param_names, params[0])):
+            print(f"\n[DEBUG] Parameters for fh_violations (event_time uses now()):")
+            param_names = ['type', 'severity', 'description', 'log_line', 'transport_ok']
+            for i, (name, value) in enumerate(zip(param_names, params)):
                 if name == 'severity':
                     print(f"  {i+1}. {name}: '{value}' (Enum8 - violation severity)")
                 elif name == 'transport_ok':
@@ -222,6 +218,7 @@ class ClickHouseAnomalyStorage:
                     value_type = type(value).__name__
                     value_len = len(str(value)) if isinstance(value, str) else len(str(value))
                     print(f"  {i+1}. {name}: {value} ({value_type}, len={value_len})")
+            print(f"  6. event_time: now() (ClickHouse function - current timestamp)")
             print(f"\n[DEBUG] Executing INSERT into fh_violations...")
             
             # Insert using tuple parameters
