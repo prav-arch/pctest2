@@ -164,7 +164,7 @@ class ClickHouseAnomalyStorage:
                 'raw_data': anomaly_data.get('raw_data', {})
             }
             
-            # Prepare record without detected_at column
+            # Prepare record for tuple parameter format (excluding detected_at and resolved_at)
             record = {
                 'id': anomaly_id,
                 'anomaly_type': anomaly_type,
@@ -173,7 +173,6 @@ class ClickHouseAnomalyStorage:
                 'status': 'OPEN',  # New anomalies start as OPEN
                 'source': f"telecom_detector_{file_path.split('/')[-1] if file_path else 'system'}",
                 'log_line': anomaly_data.get('log_details', '')[:1000],  # Limit log line length
-                'resolved_at': None,
                 'metadata': None,  # Set to None to avoid JSON parsing timeouts
                 'resolution_steps': anomaly_data.get('recommended_action', ''),
                 'category': category,
@@ -181,32 +180,43 @@ class ClickHouseAnomalyStorage:
                 'affected_systems': self._identify_affected_systems(anomaly_data)
             }
             
-            # Debug: Show exact query and parameters before insertion (excluding detected_at)
-            insert_query = """
-                INSERT INTO anomalies (
-                    id, anomaly_type, description, severity, status, source, log_line,
-                    resolved_at, metadata, resolution_steps, category,
-                    impact_level, affected_systems
-                ) VALUES (
-                    %(id)s, %(anomaly_type)s, %(description)s, %(severity)s, %(status)s,
-                    %(source)s, %(log_line)s, %(resolved_at)s,
-                    %(metadata)s, %(resolution_steps)s, %(category)s,
-                    %(impact_level)s, %(affected_systems)s
-                )
-                """
+            # Use tuple parameter format as specified
+            query = """
+            INSERT INTO anomalies 
+            (id, anomaly_type, description, severity, status, source, log_line, 
+             metadata, resolution_steps, category, impact_level, affected_systems)
+            VALUES
+            """
+            
+            params = [(
+                record['id'],
+                record['anomaly_type'], 
+                record['description'],
+                record['severity'],
+                record['status'],
+                record['source'],
+                record['log_line'],
+                record['metadata'],  # None to avoid JSON timeout
+                record['resolution_steps'],
+                record['category'],
+                record['impact_level'],
+                record['affected_systems']
+            )]
             
             print(f"\n[DEBUG] ClickHouse INSERT Query:")
-            print(insert_query)
-            print(f"\n[DEBUG] Parameters:")
-            for key, value in record.items():
-                if key == 'metadata':
-                    print(f"  {key}: {value} (None - avoiding JSON timeout)")
+            print(query)
+            print(f"\n[DEBUG] Tuple Parameters:")
+            param_names = ['id', 'anomaly_type', 'description', 'severity', 'status', 'source', 
+                          'log_line', 'metadata', 'resolution_steps', 'category', 'impact_level', 'affected_systems']
+            for i, (name, value) in enumerate(zip(param_names, params[0])):
+                if name == 'metadata':
+                    print(f"  {i+1}. {name}: {value} (None - avoiding JSON timeout)")
                 else:
-                    print(f"  {key}: {value}")
-            print(f"\n[DEBUG] Executing INSERT...")
+                    print(f"  {i+1}. {name}: {value}")
+            print(f"\n[DEBUG] Executing INSERT with tuple parameters...")
             
-            # Insert into ClickHouse with proper parameter handling
-            self.client.execute(insert_query, record)
+            # Insert using tuple parameters
+            self.client.execute(query, params)
             
             print(f"[DEBUG] INSERT completed successfully")
             
