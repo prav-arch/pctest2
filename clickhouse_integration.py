@@ -188,19 +188,20 @@ class ClickHouseAnomalyStorage:
             VALUES
             """
             
+            # Ensure all string values are properly handled (convert None to empty string for non-nullable fields)
             params = [(
-                record['id'],
-                record['anomaly_type'], 
-                record['description'],
-                record['severity'],
-                record['status'],
-                record['source'],
-                record['log_line'],
-                record['metadata'],  # None to avoid JSON timeout
-                record['resolution_steps'],
-                record['category'],
-                record['impact_level'],
-                record['affected_systems']
+                str(record['id']) if record['id'] else '',
+                str(record['anomaly_type']) if record['anomaly_type'] else '',
+                str(record['description']) if record['description'] else '',
+                str(record['severity']) if record['severity'] else 'MEDIUM',
+                str(record['status']) if record['status'] else 'OPEN',
+                str(record['source']) if record['source'] else '',
+                str(record['log_line']) if record['log_line'] else '',
+                None,  # metadata - explicitly None for nullable field
+                str(record['resolution_steps']) if record['resolution_steps'] else '',
+                str(record['category']) if record['category'] else 'OTHER',
+                str(record['impact_level']) if record['impact_level'] else 'MEDIUM',
+                str(record['affected_systems']) if record['affected_systems'] else ''
             )]
             
             print(f"\n[DEBUG] ClickHouse INSERT Query:")
@@ -210,9 +211,11 @@ class ClickHouseAnomalyStorage:
                           'log_line', 'metadata', 'resolution_steps', 'category', 'impact_level', 'affected_systems']
             for i, (name, value) in enumerate(zip(param_names, params[0])):
                 if name == 'metadata':
-                    print(f"  {i+1}. {name}: {value} (None - avoiding JSON timeout)")
+                    print(f"  {i+1}. {name}: {value} (None - nullable field)")
                 else:
-                    print(f"  {i+1}. {name}: {value}")
+                    value_type = type(value).__name__
+                    value_len = len(str(value)) if value is not None else 0
+                    print(f"  {i+1}. {name}: {value} ({value_type}, len={value_len})")
             print(f"\n[DEBUG] Executing INSERT with tuple parameters...")
             
             # Insert using tuple parameters
