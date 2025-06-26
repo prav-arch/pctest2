@@ -97,17 +97,17 @@ class ClickHouseAnomalyStorage:
             
             if not table_exists:
                 print("  [DATABASE] Table 'fh_violations' not found, creating...")
-                # Create fh_violations table matching user's structure
+                # Create fh_violations table matching user's exact structure
                 create_table_sql = """
                 CREATE TABLE fh_violations (
-                    id String,
-                    timestamp DateTime,
-                    log_line String,
+                    event_time DateTime,
+                    type String,
+                    severity Enum8('none'=0,'low'=1,'medium'=2,'high'=3),
                     description String,
-                    severity UInt8,        -- 4=Critical, 3=High, 1=Warning
-                    severity_level UInt8   -- Alternative severity field
+                    log_line String,
+                    transport_ok UInt8
                 ) ENGINE = MergeTree()
-                ORDER BY timestamp
+                ORDER BY event_time
                 """
                 
                 self.client.execute(create_table_sql)
@@ -172,43 +172,49 @@ class ClickHouseAnomalyStorage:
                 'affected_systems': self._identify_affected_systems(anomaly_data)
             }
             
-            # Map to fh_violations table structure
+            # Map to fh_violations table structure (6 fields)
             query = """
             INSERT INTO fh_violations 
-            (id, timestamp, log_line, description, severity, severity_level)
+            (event_time, type, severity, description, log_line, transport_ok)
             VALUES
             """
             
-            # Convert severity to UInt8 (4=Critical, 3=High, 1=Warning)
+            # Convert severity to Enum8 values
             severity_mapping = {
-                'CRITICAL': 4,
-                'HIGH': 3,
-                'MEDIUM': 2,
-                'LOW': 1,
-                'INFO': 1
+                'CRITICAL': 'high',
+                'HIGH': 'high', 
+                'MEDIUM': 'medium',
+                'LOW': 'low',
+                'INFO': 'low'
             }
             
-            severity_num = severity_mapping.get(record.get('severity', 'MEDIUM'), 2)
+            severity_enum = severity_mapping.get(record.get('severity', 'MEDIUM'), 'medium')
             
-            # Prepare parameters for fh_violations table (6 fields)
+            # Determine transport_ok based on anomaly type
+            transport_ok = 0  # Default: transport not ok (violation detected)
+            if record.get('anomaly_type') in ['info', 'low_priority']:
+                transport_ok = 1  # Transport ok for informational anomalies
+            
+            # Prepare parameters for exact fh_violations structure
             params = [(
-                str(record['id']) if record['id'] else '',
-                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),  # timestamp
-                str(record['log_line']) if record['log_line'] else '',
-                str(record['description']) if record['description'] else '',
-                severity_num,  # severity as UInt8
-                severity_num   # severity_level as UInt8 (same value)
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),  # event_time
+                str(record.get('anomaly_type', 'unknown')),     # type
+                severity_enum,                                   # severity (Enum8)
+                str(record['description']) if record['description'] else '',  # description
+                str(record['log_line']) if record['log_line'] else '',        # log_line
+                transport_ok                                     # transport_ok (UInt8)
             )]
             
             print(f"\n[DEBUG] ClickHouse INSERT Query:")
             print(query)
             print(f"\n[DEBUG] Tuple Parameters for fh_violations:")
-            param_names = ['id', 'timestamp', 'log_line', 'description', 'severity', 'severity_level']
+            param_names = ['event_time', 'type', 'severity', 'description', 'log_line', 'transport_ok']
             for i, (name, value) in enumerate(zip(param_names, params[0])):
-                if name in ['severity', 'severity_level']:
-                    severity_names = {4: 'CRITICAL', 3: 'HIGH', 2: 'MEDIUM', 1: 'LOW'}
-                    severity_name = severity_names.get(value, 'UNKNOWN')
-                    print(f"  {i+1}. {name}: {value} (UInt8 - {severity_name})")
+                if name == 'severity':
+                    print(f"  {i+1}. {name}: '{value}' (Enum8 - violation severity)")
+                elif name == 'transport_ok':
+                    status = "OK" if value == 1 else "VIOLATION"
+                    print(f"  {i+1}. {name}: {value} (UInt8 - {status})")
                 else:
                     value_type = type(value).__name__
                     value_len = len(str(value)) if isinstance(value, str) else len(str(value))
