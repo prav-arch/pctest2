@@ -188,7 +188,7 @@ class ClickHouseAnomalyStorage:
             VALUES
             """
             
-            # Ensure all string values are properly handled (convert None to empty string for non-nullable fields)
+            # Ensure all values are properly handled (convert None to empty string for all fields)
             params = [(
                 str(record['id']) if record['id'] else '',
                 str(record['anomaly_type']) if record['anomaly_type'] else '',
@@ -197,7 +197,7 @@ class ClickHouseAnomalyStorage:
                 str(record['status']) if record['status'] else 'OPEN',
                 str(record['source']) if record['source'] else '',
                 str(record['log_line']) if record['log_line'] else '',
-                None,  # metadata - explicitly None for nullable field
+                '',  # metadata - empty string to avoid encoding issues
                 str(record['resolution_steps']) if record['resolution_steps'] else '',
                 str(record['category']) if record['category'] else 'OTHER',
                 str(record['impact_level']) if record['impact_level'] else 'MEDIUM',
@@ -211,10 +211,10 @@ class ClickHouseAnomalyStorage:
                           'log_line', 'metadata', 'resolution_steps', 'category', 'impact_level', 'affected_systems']
             for i, (name, value) in enumerate(zip(param_names, params[0])):
                 if name == 'metadata':
-                    print(f"  {i+1}. {name}: {value} (None - nullable field)")
+                    print(f"  {i+1}. {name}: '{value}' (empty string - avoiding encoding issues)")
                 else:
                     value_type = type(value).__name__
-                    value_len = len(str(value)) if value is not None else 0
+                    value_len = len(str(value))
                     print(f"  {i+1}. {name}: {value} ({value_type}, len={value_len})")
             print(f"\n[DEBUG] Executing INSERT with tuple parameters...")
             
