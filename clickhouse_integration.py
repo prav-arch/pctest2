@@ -6,7 +6,7 @@ Stores detected anomalies in ClickHouse database for analysis and monitoring.
 
 import json
 import uuid
-from datetime import datetime
+import signal
 from typing import Dict, List, Any, Optional
 from clickhouse_driver import Client
 import logging
@@ -196,8 +196,8 @@ class ClickHouseAnomalyStorage:
                 transport_ok = 1  # Transport ok for informational anomalies
             
             # Prepare parameters for exact fh_violations structure
-            from datetime import datetime
-            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            import datetime as dt
+            current_time = dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             params = [(
                 current_time,                                    # event_time (string format)
