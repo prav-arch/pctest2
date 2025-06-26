@@ -176,7 +176,7 @@ class ClickHouseAnomalyStorage:
             query = """
             INSERT INTO fh_violations 
             (event_time, type, severity, description, log_line, transport_ok)
-            VALUES (now(), ?, ?, ?, ?, ?)
+            VALUES
             """
             
             # Convert severity to Enum8 values
@@ -195,20 +195,24 @@ class ClickHouseAnomalyStorage:
             if record.get('anomaly_type') in ['info', 'low_priority']:
                 transport_ok = 1  # Transport ok for informational anomalies
             
-            # Prepare parameters for exact fh_violations structure (5 fields, event_time uses now())
-            params = (
-                str(record.get('anomaly_type', 'unknown')),     # type
-                severity_enum,                                   # severity (Enum8)
-                str(record['description']) if record['description'] else '',  # description
-                str(record['log_line']) if record['log_line'] else '',        # log_line
-                transport_ok                                     # transport_ok (UInt8)
-            )
+            # Prepare parameters for exact fh_violations structure with proper quoting
+            type_value = str(record.get('anomaly_type', 'unknown')).replace("'", "''")
+            description_value = str(record['description']).replace("'", "''") if record['description'] else ''
+            log_line_value = str(record['log_line']).replace("'", "''") if record['log_line'] else ''
+            
+            params = [(
+                type_value,                    # type
+                severity_enum,                 # severity (Enum8)
+                description_value,             # description
+                log_line_value,                # log_line
+                transport_ok                   # transport_ok (UInt8)
+            )]
             
             print(f"\n[DEBUG] ClickHouse INSERT Query:")
             print(query)
             print(f"\n[DEBUG] Parameters for fh_violations (event_time uses now()):")
             param_names = ['type', 'severity', 'description', 'log_line', 'transport_ok']
-            for i, (name, value) in enumerate(zip(param_names, params)):
+            for i, (name, value) in enumerate(zip(param_names, params[0])):
                 if name == 'severity':
                     print(f"  {i+1}. {name}: '{value}' (Enum8 - violation severity)")
                 elif name == 'transport_ok':
@@ -217,12 +221,13 @@ class ClickHouseAnomalyStorage:
                 else:
                     value_type = type(value).__name__
                     value_len = len(str(value)) if isinstance(value, str) else len(str(value))
-                    print(f"  {i+1}. {name}: {value} ({value_type}, len={value_len})")
+                    print(f"  {i+1}. {name}: '{value}' ({value_type}, len={value_len})")
             print(f"  6. event_time: now() (ClickHouse function - current timestamp)")
-            print(f"\n[DEBUG] Executing INSERT into fh_violations...")
+            print(f"[DEBUG] Executing INSERT into fh_violations with now() for event_time...")
             
-            # Insert using tuple parameters
-            self.client.execute(query, params)
+            # Build complete query with now() function
+            complete_query = f"{query} (now(), %s, %s, %s, %s, %s)"
+            self.client.execute(complete_query, params[0])
             
             print(f"[DEBUG] INSERT completed successfully")
             
