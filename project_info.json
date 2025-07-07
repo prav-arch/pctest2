@@ -1,0 +1,25 @@
+{
+  "project_name": "Telecom Anomaly Detection System",
+  "created": "2025-06-25T05:41:48.521101",
+  "description": "5G/LTE network anomaly detection using Isolation Forest ML",
+  "features": [
+    "PCAP file analysis for protocol anomalies",
+    "HDF file analysis for UE events",
+    "CU log analysis for critical events",
+    "Adaptive contamination (5%-50%)",
+    "Severity classification (CRITICAL to INFO)",
+    "Real MAC address detection (RU: 6c:ad:ad:00:03:2a, DU: 00:11:22:33:44:67)"
+  ],
+  "files": {
+    "main_detector": "telecom_anomaly_detector.py",
+    "web_interface": "app.py",
+    "simple_runner": "run_system.py",
+    "configuration": "config.py",
+    "documentation": "replit.md"
+  },
+  "usage": [
+    "Command line: python3 run_system.py mixed_data_folder",
+    "Web interface: streamlit run app.py --server.port 5000",
+    "Single folder: python3 run_system.py /path/to/data"
+  ]
+}

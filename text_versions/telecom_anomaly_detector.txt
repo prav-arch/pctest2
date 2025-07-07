@@ -5,24 +5,21 @@ Standalone Python script for detecting anomalies in PCAP and HDF files
 using Isolation Forest algorithm for unsupervised learning.
 """
 
-# Import warning suppression first
-try:
-    from suppress_warnings import *
-except ImportError:
-    import warnings
-    import os
-    warnings.filterwarnings("ignore")
-    os.environ['PYTHONWARNINGS'] = 'ignore'
-
 import os
 import glob
 import logging
 import pickle
+import warnings
 import numpy as np
 import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Any
 from collections import defaultdict
+
+# Suppress cryptography deprecation warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="cryptography")
+warnings.filterwarnings("ignore", message=".*CryptographyDeprecationWarning.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*", category=UserWarning)
 
 # Third-party imports
 try:
@@ -75,39 +72,6 @@ class TelecomAnomalyDetector:
         # Initialize CU log analyzer
         from cu_log_analyzer import CULogAnalyzer
         self.cu_log_analyzer = CULogAnalyzer()
-        
-        # Initialize ClickHouse integration with detailed logging
-        self.clickhouse_storage = None
-        print("\n[DATABASE] Checking ClickHouse connection...")
-        try:
-            from clickhouse_integration import ClickHouseAnomalyStorage
-            self.clickhouse_storage = ClickHouseAnomalyStorage()
-            
-            print(f"[DATABASE] Attempting connection to localhost:9000/l1_app_db")
-            if self.clickhouse_storage.test_connection():
-                print("✓ [DATABASE] ClickHouse connection successful")
-                
-                if self.clickhouse_storage.ensure_table_exists():
-                    print("✓ [DATABASE] Table 'anomalies' verified/created")
-                    print("✓ [DATABASE] ClickHouse integration ENABLED - anomalies will be stored")
-                else:
-                    print("✗ [DATABASE] Table creation failed - storage DISABLED")
-                    self.clickhouse_storage = None
-            else:
-                print("✗ [DATABASE] ClickHouse connection failed - storage DISABLED")
-                print("  [DATABASE] Reason: Server not available on localhost:9000")
-                self.clickhouse_storage = None
-        except Exception as e:
-            print(f"✗ [DATABASE] ClickHouse integration failed - storage DISABLED")
-            print(f"  [DATABASE] Error: {str(e)}")
-            self.clickhouse_storage = None
-        
-        # Final status
-        if self.clickhouse_storage:
-            print("  [DATABASE] Status: CONNECTED and READY")
-        else:
-            print("  [DATABASE] Status: OFFLINE - system will continue without database storage")
-        print("-" * 60)
         
         # Legacy telecom protocol ports (kept for backward compatibility)
         self.telecom_ports = {
@@ -201,23 +165,16 @@ class TelecomAnomalyDetector:
             
             # Process each packet
             for i, packet in enumerate(packets):
-                # Skip non-Ethernet packets
-                if not packet.haslayer(Ether):
+                if not packet.haslayer(IP):
                     continue
+                    
+                ip_layer = packet[IP]
+                src_ip = ip_layer.src
+                dst_ip = ip_layer.dst
                 
-                # Extract MAC addresses first
+                # Extract MAC addresses
                 src_mac = packet[Ether].src if packet.haslayer(Ether) else None
                 dst_mac = packet[Ether].dst if packet.haslayer(Ether) else None
-                
-                # Get IP info if available, but don't require it
-                src_ip = None
-                dst_ip = None
-                if packet.haslayer(IP):
-                    ip_layer = packet[IP]
-                    src_ip = ip_layer.src
-                    dst_ip = ip_layer.dst
-                    
-
                 
                 # Create detailed packet log
                 packet_log = {
@@ -261,17 +218,11 @@ class TelecomAnomalyDetector:
                 else:
                     plane_separation['other'] += 1
                 
-                # Track flow statistics (use IPs if available, otherwise MACs)
-                if src_ip and dst_ip:
-                    flow_key = f"{src_ip}:{dst_ip}"
-                    flow_stats[flow_key]['packets'] += 1
-                    flow_stats[flow_key]['bytes'] += len(packet)
-                    flow_stats[flow_key]['directions'].add(f"{src_ip}->{dst_ip}")
-                elif src_mac and dst_mac:
-                    flow_key = f"{src_mac}:{dst_mac}"
-                    flow_stats[flow_key]['packets'] += 1
-                    flow_stats[flow_key]['bytes'] += len(packet)
-                    flow_stats[flow_key]['directions'].add(f"{src_mac}->{dst_mac}")
+                # Track flow statistics
+                flow_key = f"{src_ip}:{dst_ip}"
+                flow_stats[flow_key]['packets'] += 1
+                flow_stats[flow_key]['bytes'] += len(packet)
+                flow_stats[flow_key]['directions'].add(f"{src_ip}->{dst_ip}")
                 
                 # Track RU-DU communications with packet details based on MAC addresses
                 if self._is_ru_du_communication(src_mac, dst_mac):
@@ -283,8 +234,6 @@ class TelecomAnomalyDetector:
                         comm_key = f"{dst_mac}-{src_mac}"
                         ru_du_communications[comm_key]['ru_to_du'] += 1
                         ru_du_communications[comm_key]['ru_packets'].append(packet_log)
-                
-
             
             # Extract features for anomaly detection
             features = extract_telecom_features(
@@ -368,13 +317,8 @@ class TelecomAnomalyDetector:
         """Check if communication is between RU and DU based on MAC addresses."""
         if not src_mac or not dst_mac:
             return False
-        
-        # Check for DU sending to RU (including broadcast indicating no RU response)
-        du_to_ru = self._is_du_mac(src_mac) and (self._is_ru_mac(dst_mac) or dst_mac.lower() == "ff:ff:ff:ff:ff:ff")
-        # Check for RU sending to DU
-        ru_to_du = self._is_ru_mac(src_mac) and self._is_du_mac(dst_mac)
-        
-        return du_to_ru or ru_to_du
+        return (self._is_ru_mac(src_mac) and self._is_du_mac(dst_mac)) or \
+               (self._is_du_mac(src_mac) and self._is_ru_mac(dst_mac))
     
     def _is_du_mac(self, mac: str) -> bool:
         """Check if MAC address belongs to DU using production-ready patterns."""
@@ -403,7 +347,7 @@ class TelecomAnomalyDetector:
         """Detect specific telecom communication anomalies."""
         anomalies = []
         
-        # Check for unidirectional RU-DU communication (DU sending but RU not responding)
+        # Check for unidirectional RU-DU communication
         for comm_pair, stats in ru_du_communications.items():
             if stats['du_to_ru'] > 0 and stats['ru_to_du'] == 0:
                 # Get sample DU packets for logging
@@ -534,148 +478,64 @@ class TelecomAnomalyDetector:
             return {'error': str(e), 'file': hdf_path}
     
     def _detect_ue_event_anomalies(self, attach_events: List, detach_events: List) -> List[Dict]:
-        """Detect anomalies in UE attach/detach events with enhanced sensitivity."""
+        """Detect anomalies in UE attach/detach events."""
         anomalies = []
         
-        # Check for any UE events first
-        total_events = len(attach_events) + len(detach_events)
-        if total_events == 0:
-            return anomalies
-        
-        # 1. Check for unbalanced attach/detach ratio (lowered threshold)
-        attach_ratio = len(attach_events) / total_events
-        detach_ratio = len(detach_events) / total_events
-        
-        # More sensitive threshold - expect roughly balanced events
-        if abs(attach_ratio - detach_ratio) > 0.2:  # Reduced from 30% to 20%
-            sample_attach_events = attach_events[:3] if attach_events else []
-            sample_detach_events = detach_events[:3] if detach_events else []
+        # Check for unbalanced attach/detach ratio
+        if len(attach_events) > 0 or len(detach_events) > 0:
+            total_events = len(attach_events) + len(detach_events)
+            attach_ratio = len(attach_events) / total_events
+            detach_ratio = len(detach_events) / total_events
             
-            # Determine severity based on imbalance level
-            imbalance = abs(attach_ratio - detach_ratio)
-            severity = 'critical' if imbalance > 0.7 else 'high' if imbalance > 0.5 else 'medium'
-            
-            context = {
-                'affected_devices': len(set([e.get('ue_id') for e in attach_events + detach_events if e.get('ue_id')])),
-                'packet_loss_rate': imbalance,
-                'duration_minutes': 20,
-                'is_business_hours': True,
-                'anomaly_score': -0.4 - imbalance
-            }
-            
-            anomalies.append({
-                'type': 'unbalanced_attach_detach',
-                'description': f"Unbalanced UE events: {attach_ratio:.1%} attach, {detach_ratio:.1%} detach (imbalance: {imbalance:.1%})",
-                'context': context,
-                'severity': severity,
-                'details': {'attach_count': len(attach_events), 'detach_count': len(detach_events)},
-                'sample_attach_events': sample_attach_events,
-                'sample_detach_events': sample_detach_events,
-                'total_attach_events': len(attach_events),
-                'total_detach_events': len(detach_events)
-            })
+            # Expect roughly balanced attach/detach events
+            if abs(attach_ratio - detach_ratio) > 0.3:  # More than 30% difference
+                # Get sample events for logging
+                sample_attach_events = attach_events[:3] if attach_events else []
+                sample_detach_events = detach_events[:3] if detach_events else []
+                context = {
+                    'affected_devices': len(set([e.get('ue_id') for e in attach_events + detach_events])),
+                    'packet_loss_rate': abs(attach_ratio - detach_ratio),
+                    'duration_minutes': 20,
+                    'is_business_hours': True,
+                    'anomaly_score': -0.3
+                }
+                anomalies.append({
+                    'type': 'unbalanced_attach_detach',
+                    'description': f"Unbalanced attach/detach ratio: {attach_ratio:.2%} attach, {detach_ratio:.2%} detach",
+                    'context': context,
+                    'severity': 'medium',
+                    'details': {'attach_count': len(attach_events), 'detach_count': len(detach_events)},
+                    'sample_attach_events': sample_attach_events,
+                    'sample_detach_events': sample_detach_events,
+                    'total_attach_events': len(attach_events),
+                    'total_detach_events': len(detach_events)
+                })
         
-        # 2. Check for only attach events (UEs connecting but never disconnecting)
-        if len(attach_events) > 0 and len(detach_events) == 0:
-            context = {
-                'affected_devices': len(set([e.get('ue_id') for e in attach_events if e.get('ue_id')])),
-                'packet_loss_rate': 1.0,
-                'duration_minutes': 30,
-                'is_business_hours': True,
-                'anomaly_score': -0.8
-            }
-            anomalies.append({
-                'type': 'missing_detach_events',
-                'description': f"UEs attaching but never detaching: {len(attach_events)} attach events, 0 detach events",
-                'context': context,
-                'severity': 'critical',
-                'details': {'attach_count': len(attach_events), 'detach_count': 0},
-                'sample_attach_events': attach_events[:3],
-                'total_attach_events': len(attach_events),
-                'total_detach_events': 0
-            })
-        
-        # 3. Check for only detach events (UEs disconnecting without attach records)
-        if len(detach_events) > 0 and len(attach_events) == 0:
-            context = {
-                'affected_devices': len(set([e.get('ue_id') for e in detach_events if e.get('ue_id')])),
-                'packet_loss_rate': 1.0,
-                'duration_minutes': 30,
-                'is_business_hours': True,
-                'anomaly_score': -0.7
-            }
-            anomalies.append({
-                'type': 'missing_attach_events',
-                'description': f"UEs detaching without attach records: 0 attach events, {len(detach_events)} detach events",
-                'context': context,
-                'severity': 'high',
-                'details': {'attach_count': 0, 'detach_count': len(detach_events)},
-                'sample_detach_events': detach_events[:3],
-                'total_attach_events': 0,
-                'total_detach_events': len(detach_events)
-            })
-        
-        # 4. Check for rapid attach/detach cycles (lowered threshold)
-        ue_event_counts = defaultdict(lambda: {'attach': 0, 'detach': 0, 'attach_events': [], 'detach_events': []})
+        # Check for rapid attach/detach cycles (same UE)
+        ue_event_counts = defaultdict(lambda: {'attach': 0, 'detach': 0})
         
         for event in attach_events:
             ue_id = event.get('ue_id', 'unknown')
             ue_event_counts[ue_id]['attach'] += 1
-            ue_event_counts[ue_id]['attach_events'].append(event)
         
         for event in detach_events:
             ue_id = event.get('ue_id', 'unknown')
             ue_event_counts[ue_id]['detach'] += 1
-            ue_event_counts[ue_id]['detach_events'].append(event)
         
         for ue_id, counts in ue_event_counts.items():
-            # Lowered threshold from 5 to 3 for more sensitive detection
-            if counts['attach'] > 3 or counts['detach'] > 3:
-                severity = 'critical' if max(counts['attach'], counts['detach']) > 10 else 'high'
-                
-                context = {
-                    'affected_devices': 1,
-                    'packet_loss_rate': 0.5,
-                    'duration_minutes': 15,
-                    'is_business_hours': True,
-                    'anomaly_score': -0.6
-                }
-                
+            if counts['attach'] > 5 or counts['detach'] > 5:  # Threshold for rapid cycling
+                # Get sample events for this UE
+                ue_attach_events = [e for e in attach_events if e.get('ue_id') == ue_id][:3]
+                ue_detach_events = [e for e in detach_events if e.get('ue_id') == ue_id][:3]
                 anomalies.append({
                     'type': 'rapid_attach_detach_cycle',
-                    'description': f"UE {ue_id} rapid cycling: {counts['attach']} attaches, {counts['detach']} detaches",
-                    'context': context,
-                    'severity': severity,
+                    'description': f"UE {ue_id} has rapid attach/detach cycles",
+                    'severity': 'high',
                     'details': {'ue_id': ue_id, 'counts': counts},
-                    'sample_ue_attach_events': counts['attach_events'][:3],
-                    'sample_ue_detach_events': counts['detach_events'][:3],
-                    'total_ue_attach_events': counts['attach'],
-                    'total_ue_detach_events': counts['detach']
-                })
-        
-        # 5. Check for excessive single-type events per UE
-        for ue_id, counts in ue_event_counts.items():
-            if counts['attach'] > 1 and counts['detach'] == 0:
-                # UE attempting multiple attaches without detaching
-                anomalies.append({
-                    'type': 'multiple_attach_no_detach',
-                    'description': f"UE {ue_id} multiple attach attempts without detach: {counts['attach']} attaches",
-                    'severity': 'medium',
-                    'details': {'ue_id': ue_id, 'attach_count': counts['attach']},
-                    'sample_ue_attach_events': counts['attach_events'][:3],
-                    'total_ue_attach_events': counts['attach'],
-                    'total_ue_detach_events': 0
-                })
-            elif counts['detach'] > 1 and counts['attach'] == 0:
-                # UE detaching multiple times without attach records
-                anomalies.append({
-                    'type': 'multiple_detach_no_attach',
-                    'description': f"UE {ue_id} multiple detach events without attach: {counts['detach']} detaches",
-                    'severity': 'medium',
-                    'details': {'ue_id': ue_id, 'detach_count': counts['detach']},
-                    'sample_ue_detach_events': counts['detach_events'][:3],
-                    'total_ue_attach_events': 0,
-                    'total_ue_detach_events': counts['detach']
+                    'sample_ue_attach_events': ue_attach_events,
+                    'sample_ue_detach_events': ue_detach_events,
+                    'total_ue_attach_events': len([e for e in attach_events if e.get('ue_id') == ue_id]),
+                    'total_ue_detach_events': len([e for e in detach_events if e.get('ue_id') == ue_id])
                 })
         
         return self._apply_severity_classification(anomalies)
@@ -691,10 +551,14 @@ class TelecomAnomalyDetector:
             # Apply severity classification
             classification = self.severity_classifier.classify_anomaly(anomaly_type, context)
             
-            # Add simplified classification information to anomaly
-            anomaly['severity_level'] = classification['severity']
-            anomaly['priority_score'] = classification['priority_score']
-            anomaly['escalation_required'] = classification['escalation_required']
+            # Add classification information to anomaly
+            anomaly['severity_classification'] = classification
+            anomaly['severity_level'] = classification.severity.value
+            anomaly['priority_score'] = classification.priority_score
+            anomaly['impact_description'] = classification.impact_description
+            anomaly['recommended_action'] = classification.recommended_action
+            anomaly['response_time'] = classification.response_time
+            anomaly['escalation_required'] = classification.escalation_required
             
             classified_anomalies.append(anomaly)
         
@@ -842,10 +706,13 @@ class TelecomAnomalyDetector:
                         anomaly['type'], context
                     )
                     
-                    # Add simplified classification to anomaly
-                    anomaly['severity_level'] = classification['severity']
-                    anomaly['priority_score'] = classification['priority_score']
-                    anomaly['escalation_required'] = classification['escalation_required']
+                    # Add classification to anomaly
+                    anomaly['severity_level'] = classification.severity.value
+                    anomaly['priority_score'] = classification.priority_score
+                    anomaly['impact_description'] = classification.impact_description
+                    anomaly['response_time'] = classification.response_time
+                    anomaly['escalation_required'] = classification.escalation_required
+                    anomaly['recommended_action'] = classification.recommended_action
             
             self.logger.info(f"CU log analysis completed for {file_path}")
             return result
@@ -872,28 +739,17 @@ class TelecomAnomalyDetector:
         txt_files = []
         
         if self.input_folder:
-            # Check if input is a single file or directory
-            if os.path.isfile(self.input_folder):
-                # Single file specified
-                if self.input_folder.endswith(('.pcap', '.cap')):
-                    pcap_files.append(self.input_folder)
-                elif self.input_folder.endswith(('.h5', '.hdf5', '.hdf')):
-                    hdf_files.append(self.input_folder)
-                elif self.input_folder.endswith(('.txt', '.log')):
-                    txt_files.append(self.input_folder)
-                self.logger.info(f"Using single file: {self.input_folder}")
-            elif os.path.exists(self.input_folder):
-                # Directory specified
+            # Use custom input folder if specified
+            if os.path.exists(self.input_folder):
                 pcap_files.extend(glob.glob(os.path.join(self.input_folder, "*.pcap")))
                 pcap_files.extend(glob.glob(os.path.join(self.input_folder, "*.cap")))
                 hdf_files.extend(glob.glob(os.path.join(self.input_folder, "*.h5")))
                 hdf_files.extend(glob.glob(os.path.join(self.input_folder, "*.hdf5")))
-                hdf_files.extend(glob.glob(os.path.join(self.input_folder, "*.hdf")))
                 txt_files.extend(glob.glob(os.path.join(self.input_folder, "*.txt")))
                 txt_files.extend(glob.glob(os.path.join(self.input_folder, "*.log")))
                 self.logger.info(f"Using custom input folder: {self.input_folder}")
             else:
-                self.logger.error(f"Custom input path not found: {self.input_folder}")
+                self.logger.error(f"Custom input folder not found: {self.input_folder}")
                 return
         else:
             # Use default configured directories
@@ -903,48 +759,12 @@ class TelecomAnomalyDetector:
                     pcap_files.extend(glob.glob(os.path.join(data_dir, "*.cap")))
                     hdf_files.extend(glob.glob(os.path.join(data_dir, "*.h5")))
                     hdf_files.extend(glob.glob(os.path.join(data_dir, "*.hdf5")))
-                    hdf_files.extend(glob.glob(os.path.join(data_dir, "*.hdf")))
                     txt_files.extend(glob.glob(os.path.join(data_dir, "*.txt")))
                     txt_files.extend(glob.glob(os.path.join(data_dir, "*.log")))
                 else:
                     self.logger.warning(f"Data directory not found: {data_dir}")
         
         self.logger.info(f"Found {len(pcap_files)} PCAP files, {len(hdf_files)} HDF files, and {len(txt_files)} CU log files")
-        
-        # Production logging for HDF file detection
-        print(f"\n[FILE DISCOVERY] Found {len(pcap_files)} PCAP, {len(hdf_files)} HDF, {len(txt_files)} TXT files")
-        
-        if self.input_folder:
-            print(f"[SEARCH MODE] Custom path specified - searching ONLY in: {self.input_folder}")
-        else:
-            print(f"[SEARCH MODE] No custom path - searching in ALL configured directories:")
-            for i, data_dir in enumerate(self.config.DATA_DIRS, 1):
-                exists = os.path.exists(data_dir)
-                status = "EXISTS" if exists else "NOT FOUND"
-                print(f"  {i}. {data_dir} [{status}]")
-        
-        if hdf_files:
-            print("[HDF FILES DETECTED]")
-            for i, hdf_file in enumerate(hdf_files, 1):
-                print(f"  {i}. {hdf_file}")
-        else:
-            print("[NO HDF FILES FOUND] - Check file extensions and paths")
-            print("  Searching for: .hdf, .hdf5, .h5 extensions")
-            if self.input_folder:
-                print(f"  In custom folder: {self.input_folder}")
-                if os.path.exists(self.input_folder):
-                    all_files = os.listdir(self.input_folder)
-                    print(f"  Files in folder: {len(all_files)} total")
-                    hdf_like = [f for f in all_files if f.endswith(('.hdf', '.hdf5', '.h5', '.HDF', '.HDF5', '.H5'))]
-                    if hdf_like:
-                        print(f"  HDF-like files found: {hdf_like}")
-                    else:
-                        print(f"  No HDF files with supported extensions found")
-                else:
-                    print(f"  ERROR: Folder does not exist!")
-            else:
-                print(f"  In configured directories: {self.config.DATA_DIRS}")
-
         
         # Process files and collect features
         all_features = []
@@ -958,30 +778,11 @@ class TelecomAnomalyDetector:
                 all_results.append(result)
         
         # Process HDF files
-        hdf_processed_count = 0
         for hdf_file in hdf_files:
-            print(f"\n[HDF PROCESSING] Analyzing: {hdf_file}")
-            try:
-                result = self.analyze_hdf_file(hdf_file)
-                print(f"[HDF RESULT] Keys: {list(result.keys())}")
-                print(f"[HDF RESULT] Has error: {'error' in result}")
-                
-                if 'error' not in result:
-                    all_features.append(result['features'])
-                    all_results.append(result)
-                    hdf_processed_count += 1
-                    print(f"[HDF SUCCESS] File processed successfully")
-                    print(f"[HDF EVENTS] Total: {result.get('total_events', 0)}, Attach: {result.get('attach_events', 0)}, Detach: {result.get('detach_events', 0)}")
-                    if 'anomalies' in result and result['anomalies']:
-                        print(f"[HDF ANOMALIES] Found {len(result['anomalies'])} anomalies")
-                    else:
-                        print(f"[HDF NORMAL] No anomalies detected")
-                else:
-                    print(f"[HDF ERROR] {result.get('error', 'Unknown error')}")
-            except Exception as e:
-                print(f"[HDF EXCEPTION] Error processing {hdf_file}: {str(e)}")
-        
-        print(f"\n[HDF SUMMARY] Processed {hdf_processed_count}/{len(hdf_files)} HDF files successfully")
+            result = self.analyze_hdf_file(hdf_file)
+            if 'error' not in result:
+                all_features.append(result['features'])
+                all_results.append(result)
         
         # Process CU log files
         for txt_file in txt_files:
@@ -1010,8 +811,7 @@ class TelecomAnomalyDetector:
                 ml_anomaly_detected = prediction == -1
                 low_anomaly_score = anomaly_score < -0.1
                 
-                # Always flag as anomaly if specific telecom anomalies are detected
-                is_anomaly = has_specific_anomalies or ml_anomaly_detected or low_anomaly_score
+                is_anomaly = ml_anomaly_detected or has_specific_anomalies or low_anomaly_score
                 
                 if is_anomaly:
                     detected_anomalies.append(result)
@@ -1059,26 +859,25 @@ class TelecomAnomalyDetector:
                             detected_anomalies.append(result)
         
         # Display results for detected anomalies
-        if detected_anomalies:
-            print("\n" + "="*80)
-            print("TELECOM ANOMALY DETECTION RESULTS") 
-            print("="*80)
-            any_anomalies_found = True
-            
-            for result in detected_anomalies:
-                # Get prediction for this result
-                prediction, anomaly_score = self.predict_anomalies(result['features']) if 'features' in result else (-1, -0.5)
+        for result in detected_anomalies:
                 
-                # Display results for anomalous files
-                self._display_file_results(result, prediction, anomaly_score)
-                total_anomalies += 1
+                if is_anomaly:
+                    if not any_anomalies_found:
+                        # Print header only when first anomaly is found
+                        print("\n" + "="*80)
+                        print("TELECOM ANOMALY DETECTION RESULTS")
+                        print("="*80)
+                        any_anomalies_found = True
+                    
+                    # Display results only for anomalous files
+                    self._display_file_results(result, prediction, anomaly_score)
+                    total_anomalies += 1
         
         # Display summary based on whether anomalies were found
         if any_anomalies_found:
             print(f"\n" + "="*80)
             print(f"SUMMARY:")
             print(f"Total files processed: {len(all_results)}")
-            print(f"File breakdown: {len(pcap_files)} PCAP + {hdf_processed_count} HDF + {len(txt_files)} TXT = {len(all_results)} total")
             print(f"Anomalies detected: {total_anomalies}")
             print(f"Anomaly rate: {total_anomalies/len(all_results)*100:.2f}%")
             
@@ -1087,11 +886,6 @@ class TelecomAnomalyDetector:
             
             # Display comprehensive anomaly summary
             self._display_comprehensive_anomaly_summary(detected_anomalies)
-            
-            # Store anomalies in ClickHouse database
-            if self.clickhouse_storage and detected_anomalies:
-                self._store_anomalies_in_clickhouse(detected_anomalies)
-            
             print("="*80)
         else:
             # Only print if files were actually processed
@@ -1153,15 +947,6 @@ class TelecomAnomalyDetector:
                     anomaly_counter += 1
         
         print(f"\nTotal anomalies found: {anomaly_counter - 1}")
-        
-        # Store anomalies in ClickHouse database (with timeout protection)
-        if self.clickhouse_storage and detected_anomalies:
-            print("  [DATABASE] Attempting to store anomalies...")
-            try:
-                self._store_anomalies_in_clickhouse(detected_anomalies)
-            except Exception as e:
-                print(f"  [DATABASE] Storage failed: {str(e)}")
-                # Continue without database storage
 
     def _display_file_results(self, result: Dict, prediction: int, anomaly_score: float) -> None:
         """Display analysis results for a single file."""
@@ -1371,76 +1156,6 @@ class TelecomAnomalyDetector:
         
         print(f"     Log file: {filename}")
         print()
-
-    def _store_anomalies_in_clickhouse(self, detected_anomalies: List[Dict]) -> None:
-        """Store detected anomalies in ClickHouse database with timeout protection."""
-        import signal
-        
-        def timeout_handler(signum, frame):
-            raise TimeoutError("ClickHouse operation timed out")
-        
-        try:
-            # Set a 15-second timeout for the entire storage operation
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(15)
-            
-            stored_count = 0
-            total_anomalies = sum(len(result.get('anomalies', [])) for result in detected_anomalies if 'anomalies' in result)
-            
-            print(f"  [DATABASE] Processing {total_anomalies} anomalies for storage...")
-            
-            anomaly_index = 0
-            
-            for result in detected_anomalies:
-                if 'anomalies' in result and result['anomalies']:
-                    file_path = result.get('file', '')
-                    
-                    for anomaly in result['anomalies']:
-                        anomaly_index += 1
-                        print(f"\n  [DATABASE] Processing anomaly {anomaly_index}/{total_anomalies}: {anomaly.get('type', 'unknown')}")
-                        
-                        # Prepare anomaly data for ClickHouse
-                        anomaly_data = {
-                            'type': anomaly.get('type', 'unknown'),
-                            'description': anomaly.get('description', ''),
-                            'severity': anomaly.get('severity_level', anomaly.get('severity', 'MEDIUM')),
-                            'anomaly_score': result.get('anomaly_score', 0.0),
-                            'priority_score': anomaly.get('priority_score', 0.0),
-                            'timestamp': anomaly.get('timestamp', ''),
-                            'recommended_action': anomaly.get('recommended_action', ''),
-                            'log_details': anomaly.get('log_details', ''),
-                            'raw_data': {
-                                'impact_description': anomaly.get('impact_description', ''),
-                                'response_time': anomaly.get('response_time', ''),
-                                'escalation_required': anomaly.get('escalation_required', False)
-                            }
-                        }
-                        
-                        if self.clickhouse_storage.store_anomaly(anomaly_data, file_path):
-                            stored_count += 1
-            
-            # Cancel the alarm
-            signal.alarm(0)
-            
-            if stored_count > 0:
-                print(f"✓ [DATABASE] Stored {stored_count} anomalies in ClickHouse")
-                
-                # Skip statistics to avoid additional timeout risk
-                print(f"✓ [DATABASE] Storage operation completed successfully")
-            else:
-                print(f"✗ [DATABASE] No anomalies were stored")
-                    
-        except TimeoutError:
-            signal.alarm(0)  # Cancel alarm
-            print(f"✗ [DATABASE] ClickHouse storage timed out (15s) - continuing without storage")
-        except Exception as e:
-            signal.alarm(0)  # Cancel alarm
-            error_msg = str(e)
-            if "timed out" in error_msg.lower():
-                print(f"✗ [DATABASE] ClickHouse timeout during storage - continuing")
-            else:
-                print(f"✗ [DATABASE] Storage error: {error_msg}")
-                print(f"  [DATABASE] Continuing without database storage")
 
 
 def main():

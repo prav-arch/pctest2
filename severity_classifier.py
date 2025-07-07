@@ -85,7 +85,7 @@ class SeverityClassifier:
             SeverityLevel.INFO: "Informational: Archive for future reference"
         }
 
-    def classify_anomaly(self, anomaly_type: str, context: Dict) -> AnomalyClassification:
+    def classify_anomaly(self, anomaly_type: str, context: Dict) -> Dict:
         """
         Classify an anomaly and determine its severity level.
         
@@ -94,7 +94,7 @@ class SeverityClassifier:
             context: Additional context about the anomaly
             
         Returns:
-            Complete anomaly classification
+            Simplified classification with severity, priority_score, escalation_required
         """
         # Get base metrics for anomaly type
         base_metrics = self.anomaly_base_metrics.get(
@@ -111,19 +111,12 @@ class SeverityClassifier:
         # Determine severity level
         severity = self._determine_severity_level(priority_score)
         
-        # Generate impact description
-        impact_description = self._generate_impact_description(
-            anomaly_type, severity, context
-        )
-        
-        return AnomalyClassification(
-            severity=severity,
-            priority_score=priority_score,
-            impact_description=impact_description,
-            recommended_action=self.recommended_actions[severity],
-            response_time=self.response_times[severity],
-            escalation_required=severity in [SeverityLevel.CRITICAL, SeverityLevel.HIGH]
-        )
+        # Return simplified structure
+        return {
+            'severity': severity.value,
+            'priority_score': priority_score,
+            'escalation_required': severity in [SeverityLevel.CRITICAL, SeverityLevel.HIGH]
+        }
 
     def _adjust_metrics_for_context(self, base_metrics: SeverityMetrics, context: Dict) -> SeverityMetrics:
         """Adjust base metrics based on anomaly context."""
