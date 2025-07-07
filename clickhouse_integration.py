@@ -10,6 +10,8 @@ import signal
 from typing import Dict, List, Any, Optional
 from clickhouse_driver import Client
 import logging
+from datetime import datetime as dt
+from datetime import datetime as dt
 
 class ClickHouseAnomalyStorage:
     """
@@ -147,12 +149,13 @@ class ClickHouseAnomalyStorage:
             # Determine category based on anomaly type
             category = self._categorize_anomaly(anomaly_type)
             
-            # Create metadata JSON
+            # Create metadata JSON - use string timestamps to avoid tzinfo issues
+            current_time = dt.now().strftime('%Y-%m-%d %H:%M:%S')
             metadata = {
                 'file_path': file_path,
                 'anomaly_score': anomaly_data.get('anomaly_score', 0.0),
                 'priority_score': anomaly_data.get('priority_score', 0.0),
-                'timestamp': anomaly_data.get('timestamp', ''),
+                'timestamp': current_time,
                 'raw_data': anomaly_data.get('raw_data', {})
             }
             
@@ -172,8 +175,8 @@ class ClickHouseAnomalyStorage:
                 'affected_systems': self._identify_affected_systems(anomaly_data)
             }
             
-            # Map to fh_violations table structure using now() for event_time
-            query = "INSERT INTO fh_violations (event_time, type, severity, description, log_line, transport_ok)"
+            # Map to fh_violations table structure (event_time auto-inserts)
+            query = "INSERT INTO fh_violations (type, severity, description, log_line, transport_ok)"
             
             # Convert severity to Enum8 values
             severity_mapping = {
@@ -219,18 +222,11 @@ class ClickHouseAnomalyStorage:
                     value_type = type(value).__name__
                     value_len = len(str(value)) if isinstance(value, str) else len(str(value))
                     print(f"  {i+1}. {name}: '{value}' ({value_type}, len={value_len})")
-            print(f"  6. event_time: now() (ClickHouse function - current timestamp)")
+            print(f"  event_time: AUTO-INSERT (ClickHouse automatically adds current timestamp)")
             
-            # Use ClickHouse client format with parameterized query
+            # Use ClickHouse client format with parameterized query (5 columns only)
             insert_query = "INSERT INTO fh_violations VALUES"
-            values_data = [(
-                None,  # event_time will be filled by ClickHouse with now()
-                data_tuple[0],  # type
-                data_tuple[1],  # severity  
-                data_tuple[2],  # description
-                data_tuple[3],  # log_line
-                data_tuple[4]   # transport_ok
-            )]
+            values_data = [data_tuple]  # Direct tuple without event_time
             
             print(f"[DEBUG] INSERT query: {insert_query}")
             print(f"[DEBUG] Values data: {values_data}")
@@ -248,7 +244,7 @@ class ClickHouseAnomalyStorage:
             print(f"\n[DEBUG] INSERT failed with error: {error_msg}")
             
             # Handle specific datetime errors
-            if "tzinfo" in error_msg:
+            if "tzinfo" in error_msg or "NoneType" in error_msg:
                 print(f"[DEBUG] DateTime timezone error - using string format instead")
             elif "Enum8" in error_msg:
                 print(f"[DEBUG] Enum8 error - check severity values")
